@@ -1,27 +1,8 @@
 import { GameSaveData, GameSummary } from '../types/market';
 
-const REGISTRY_KEY = 'apex_games_registry_v4';
-const LOCAL_GAMES_PREFIX = 'apex_game_save_v4_';
-const MASTER_REGISTRY_ID = 'ff808181a058d43f01a0590e88c80270';
-const CLOUD_API_BASE = 'https://api.restful-api.dev/objects';
-
-// ID mapping for specific game saves in cloud
-const CLOUD_MAP_KEY = 'apex_cloud_id_map_v4';
-
-function getCloudIdMap(): Record<string, string> {
-  try {
-    const raw = localStorage.getItem(CLOUD_MAP_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-function setCloudIdMap(map: Record<string, string>) {
-  try {
-    localStorage.setItem(CLOUD_MAP_KEY, JSON.stringify(map));
-  } catch {}
-}
+const REGISTRY_KEY = 'apex_games_registry_v5';
+const LOCAL_GAMES_PREFIX = 'apex_game_save_v5_';
+const CLOUD_SYNC_TOPIC = 'https://ntfy.sh/apex_trade_games_oz29_v5';
 
 // Unique 6-character game code generator
 export function generateGameId(): string {
@@ -33,7 +14,7 @@ export function generateGameId(): string {
   return id;
 }
 
-// Fetch all games from Cloud Master Registry and local storage
+// Fetch all games (Local Storage + Cloud Realtime Topic)
 export async function fetchAllGames(): Promise<GameSummary[]> {
   let localGames: GameSummary[] = [];
 
@@ -46,21 +27,60 @@ export async function fetchAllGames(): Promise<GameSummary[]> {
     localGames = [];
   }
 
-  // Fetch Cloud Master Registry (with CORS *)
+  // Fetch Cloud sync items with full CORS support
   try {
-    const response = await fetch(`${CLOUD_API_BASE}/${MASTER_REGISTRY_ID}`, {
+    const response = await fetch(`${CLOUD_SYNC_TOPIC}/json?poll=1&since=all`, {
       signal: AbortSignal.timeout(3000),
     });
-    if (response.ok) {
-      const result = await response.json();
-      const cloudGames: GameSummary[] = result?.data?.games || [];
 
-      // Merge unique games by ID, preferring newest updatedAt
+    if (response.ok) {
+      const rawText = await response.text();
+      const lines = rawText.trim().split('\n').filter(Boolean);
+      
+      const cloudGamesMap = new Map<string, GameSaveData>();
+      lines.forEach((line) => {
+        try {
+          const item = JSON.parse(line);
+          if (item.event === 'message' && item.message) {
+            const parsed = JSON.parse(item.message);
+            if (parsed && parsed.id) {
+              if (parsed._isDeleted) {
+                cloudGamesMap.delete(parsed.id);
+                localStorage.removeItem(`${LOCAL_GAMES_PREFIX}${parsed.id}`);
+              } else {
+                const existing = cloudGamesMap.get(parsed.id);
+                if (!existing || parsed.updatedAt > existing.updatedAt) {
+                  cloudGamesMap.set(parsed.id, parsed);
+                  // Cache full game locally
+                  localStorage.setItem(`${LOCAL_GAMES_PREFIX}${parsed.id}`, JSON.stringify(parsed));
+                }
+              }
+            }
+          }
+        } catch {}
+      });
+
+      // Merge unique games by ID
       const map = new Map<string, GameSummary>();
-      [...localGames, ...cloudGames].forEach((g) => {
-        const existing = map.get(g.id);
-        if (!existing || g.updatedAt > existing.updatedAt) {
-          map.set(g.id, g);
+      localGames.forEach((g) => map.set(g.id, g));
+
+      cloudGamesMap.forEach((cg) => {
+        const summary: GameSummary = {
+          id: cg.id,
+          name: cg.name,
+          createdAt: cg.createdAt,
+          updatedAt: cg.updatedAt,
+          initialCash: cg.initialCash,
+          cashAvailable: cg.cashAvailable,
+          cashInvested: cg.cashInvested,
+          totalNetWorth: cg.totalNetWorth,
+          totalPnL: cg.totalPnL,
+          totalPnLPercent: cg.totalPnLPercent,
+          positionsCount: cg.positions ? cg.positions.length : 0,
+        };
+        const existing = map.get(cg.id);
+        if (!existing || summary.updatedAt > existing.updatedAt) {
+          map.set(cg.id, summary);
         }
       });
 
@@ -69,13 +89,13 @@ export async function fetchAllGames(): Promise<GameSummary[]> {
       return merged;
     }
   } catch (err) {
-    console.warn('Cloud registry fetch note:', err);
+    console.warn('Cloud realtime sync note:', err);
   }
 
   return localGames.sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-// Save or update game in Cloud and Local
+// Save or update game in Cloud and Local (Instant 0ms + Cloud Broadcast)
 export async function syncGameToCloudAndLocal(game: GameSaveData): Promise<boolean> {
   const summary: GameSummary = {
     id: game.id,
@@ -117,49 +137,16 @@ export async function syncGameToCloudAndLocal(game: GameSaveData): Promise<boole
 
   localStorage.setItem(REGISTRY_KEY, JSON.stringify(updatedRegistry));
 
-  // 3. Sync to Cloud Registry & Game Object
+  // 3. Broadcast to Real-Time Cloud Topic (Cross-Device PC & Mobile Sync)
   try {
-    // Update Master Registry on Cloud
-    fetch(`${CLOUD_API_BASE}/${MASTER_REGISTRY_ID}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: 'apex_master_registry_oz29',
-        data: { games: updatedRegistry },
-      }),
+    fetch(CLOUD_SYNC_TOPIC, {
+      method: 'POST',
+      headers: {
+        'Title': `Apex Game ${game.name}`,
+        'Tags': 'chart_with_upwards_trend',
+      },
+      body: JSON.stringify(fullData),
     }).catch(() => {});
-
-    // Save full game data object to Cloud
-    const idMap = getCloudIdMap();
-    const cloudObjectId = idMap[game.id];
-
-    if (cloudObjectId) {
-      fetch(`${CLOUD_API_BASE}/${cloudObjectId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: `apex_game_${game.id}`,
-          data: fullData,
-        }),
-      }).catch(() => {});
-    } else {
-      fetch(`${CLOUD_API_BASE}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: `apex_game_${game.id}`,
-          data: fullData,
-        }),
-      })
-        .then((res) => res.json())
-        .then((created) => {
-          if (created && created.id) {
-            idMap[game.id] = created.id;
-            setCloudIdMap(idMap);
-          }
-        })
-        .catch(() => {});
-    }
   } catch (err) {
     console.warn('Cloud sync error note:', err);
   }
@@ -194,18 +181,6 @@ export async function renameGameById(gameId: string, newName: string): Promise<b
   );
   localStorage.setItem(REGISTRY_KEY, JSON.stringify(updated));
 
-  // Sync renamed registry to cloud
-  try {
-    fetch(`${CLOUD_API_BASE}/${MASTER_REGISTRY_ID}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: 'apex_master_registry_oz29',
-        data: { games: updated },
-      }),
-    }).catch(() => {});
-  } catch {}
-
   return true;
 }
 
@@ -213,7 +188,7 @@ export async function renameGameById(gameId: string, newName: string): Promise<b
 export async function loadGameData(gameId: string): Promise<GameSaveData | null> {
   const cleanId = gameId.trim().toUpperCase();
 
-  // Try local first
+  // Try local first (instant)
   try {
     const local = localStorage.getItem(`${LOCAL_GAMES_PREFIX}${cleanId}`);
     if (local) {
@@ -222,18 +197,33 @@ export async function loadGameData(gameId: string): Promise<GameSaveData | null>
     }
   } catch {}
 
-  // Try loading from cloud
+  // Try loading from Cloud
   try {
-    const idMap = getCloudIdMap();
-    const cloudObjectId = idMap[cleanId];
-    if (cloudObjectId) {
-      const res = await fetch(`${CLOUD_API_BASE}/${cloudObjectId}`, { signal: AbortSignal.timeout(3000) });
-      if (res.ok) {
-        const item = await res.json();
-        if (item?.data?.id) {
-          localStorage.setItem(`${LOCAL_GAMES_PREFIX}${cleanId}`, JSON.stringify(item.data));
-          return item.data;
-        }
+    const response = await fetch(`${CLOUD_SYNC_TOPIC}/json?poll=1&since=all`, {
+      signal: AbortSignal.timeout(3000),
+    });
+    if (response.ok) {
+      const rawText = await response.text();
+      const lines = rawText.trim().split('\n').filter(Boolean);
+      let targetGame: GameSaveData | null = null;
+
+      lines.forEach((line) => {
+        try {
+          const item = JSON.parse(line);
+          if (item.event === 'message' && item.message) {
+            const parsed = JSON.parse(item.message);
+            if (parsed && parsed.id === cleanId && !parsed._isDeleted) {
+              if (!targetGame || parsed.updatedAt > targetGame.updatedAt) {
+                targetGame = parsed;
+              }
+            }
+          }
+        } catch {}
+      });
+
+      if (targetGame) {
+        localStorage.setItem(`${LOCAL_GAMES_PREFIX}${cleanId}`, JSON.stringify(targetGame));
+        return targetGame;
       }
     }
   } catch {}
@@ -241,7 +231,7 @@ export async function loadGameData(gameId: string): Promise<GameSaveData | null>
   return null;
 }
 
-// Delete a game
+// Delete a game from Cloud and Local
 export async function deleteGameById(gameId: string): Promise<boolean> {
   const cleanId = gameId.trim().toUpperCase();
 
@@ -256,17 +246,41 @@ export async function deleteGameById(gameId: string): Promise<boolean> {
   const updatedRegistry = registry.filter((g) => g.id !== cleanId);
   localStorage.setItem(REGISTRY_KEY, JSON.stringify(updatedRegistry));
 
-  // Update cloud registry
+  // Broadcast deletion to cloud
   try {
-    fetch(`${CLOUD_API_BASE}/${MASTER_REGISTRY_ID}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: 'apex_master_registry_oz29',
-        data: { games: updatedRegistry },
-      }),
+    fetch(CLOUD_SYNC_TOPIC, {
+      method: 'POST',
+      body: JSON.stringify({ id: cleanId, _isDeleted: true, updatedAt: Date.now() }),
     }).catch(() => {});
   } catch {}
 
   return true;
+}
+
+// Subscribe to real-time SSE updates from other devices (PC <-> Mobile)
+export function subscribeToRealtimeCloud(onUpdate: (game: GameSaveData) => void): () => void {
+  if (typeof EventSource === 'undefined') return () => {};
+
+  try {
+    const eventSource = new EventSource(`${CLOUD_SYNC_TOPIC}/sse`);
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.event === 'message' && data.message) {
+          const gamePayload = JSON.parse(data.message);
+          if (gamePayload && gamePayload.id && !gamePayload._isDeleted) {
+            localStorage.setItem(`${LOCAL_GAMES_PREFIX}${gamePayload.id}`, JSON.stringify(gamePayload));
+            onUpdate(gamePayload);
+          }
+        }
+      } catch {}
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  } catch {
+    return () => {};
+  }
 }

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Position, TradeRecord, PositionType, StockQuote, GameSummary, GameSaveData } from '../types/market';
 import { fetchStockData } from '../services/marketApi';
-import { fetchAllGames, syncGameToCloudAndLocal, loadGameData, deleteGameById, renameGameById, generateGameId } from '../services/gamesHubApi';
+import { fetchAllGames, syncGameToCloudAndLocal, loadGameData, deleteGameById, renameGameById, generateGameId, subscribeToRealtimeCloud } from '../services/gamesHubApi';
 
 interface TradingContextType {
   // Theme
@@ -244,6 +244,15 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
 
     init();
+
+    // Subscribe to Realtime Cross-Device SSE Broadcast
+    const unsubscribe = subscribeToRealtimeCloud(() => {
+      fetchGamesList();
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, [fetchGamesList, switchGame, createGame]);
 
   // Sync Quotes
