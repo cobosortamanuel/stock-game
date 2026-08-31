@@ -1,7 +1,7 @@
-// Robust Service Worker for Apex Trade PWA
-const CACHE_NAME = 'apex-trade-v3';
+// Apex Trade PWA Service Worker
+const CACHE_NAME = 'apex-trade-v4';
 
-self.addEventListener('install', () => {
+self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
@@ -15,25 +15,31 @@ self.addEventListener('activate', (event) => {
           }
         })
       );
-    })
+    }).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
+  // Only handle GET requests from the same origin
   if (event.request.method !== 'GET') return;
-  
+
   const url = new URL(event.request.url);
-  // Do NOT intercept third-party APIs (Yahoo, CORS proxies, cloud sync)
-  if (url.origin !== self.location.origin) {
-    return;
-  }
+  if (url.origin !== self.location.origin) return;
 
   event.respondWith(
-    fetch(event.request).catch(async () => {
-      const cached = await caches.match(event.request);
-      if (cached) return cached;
-      return new Response('Offline', { status: 503, statusText: 'Offline' });
-    })
+    fetch(event.request)
+      .then((networkResponse) => {
+        return networkResponse;
+      })
+      .catch(() => {
+        return caches.match(event.request).then((cachedResponse) => {
+          if (cachedResponse) return cachedResponse;
+          return new Response('Offline', {
+            status: 503,
+            statusText: 'Service Unavailable',
+            headers: { 'Content-Type': 'text/plain' },
+          });
+        });
+      })
   );
 });

@@ -1,7 +1,7 @@
 import { GameSaveData, GameSummary } from '../types/market';
 
-const REGISTRY_KEY = 'apex_games_registry_v2';
-const LOCAL_GAMES_PREFIX = 'apex_game_save_v2_';
+const REGISTRY_KEY = 'apex_games_registry_v3';
+const LOCAL_GAMES_PREFIX = 'apex_game_save_v3_';
 
 // Unique ID generator for games
 export function generateGameId(): string {
@@ -13,7 +13,7 @@ export function generateGameId(): string {
   return id;
 }
 
-// Fetch all created games from Local Registry & Cloud fallback
+// Fetch all created games from Local Storage (0ms, zero CORS errors)
 export async function fetchAllGames(): Promise<GameSummary[]> {
   let localGames: GameSummary[] = [];
 
@@ -26,32 +26,10 @@ export async function fetchAllGames(): Promise<GameSummary[]> {
     localGames = [];
   }
 
-  // Cloud sync attempt (non-blocking, silent)
-  try {
-    const cloudUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent('https://api.npoint.io/apex_registry')}`;
-    const res = await fetch(cloudUrl, { signal: AbortSignal.timeout(2000) });
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        const map = new Map<string, GameSummary>();
-        [...localGames, ...data].forEach(g => {
-          const existing = map.get(g.id);
-          if (!existing || g.updatedAt > existing.updatedAt) {
-            map.set(g.id, g);
-          }
-        });
-        localGames = Array.from(map.values()).sort((a, b) => b.updatedAt - a.updatedAt);
-        localStorage.setItem(REGISTRY_KEY, JSON.stringify(localGames));
-      }
-    }
-  } catch {
-    // Local-first fallback works immediately
-  }
-
   return localGames.sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-// Save or update game in Local Storage and Cloud
+// Save or update game in Local Storage immediately
 export async function syncGameToCloudAndLocal(game: GameSaveData): Promise<boolean> {
   const summary: GameSummary = {
     id: game.id,
@@ -72,11 +50,11 @@ export async function syncGameToCloudAndLocal(game: GameSaveData): Promise<boole
     updatedAt: summary.updatedAt,
   };
 
-  // 1. Instant local persistence (0ms latency)
+  // 1. Instant persistence in LocalStorage
   try {
     localStorage.setItem(`${LOCAL_GAMES_PREFIX}${game.id}`, JSON.stringify(fullData));
   } catch (e) {
-    console.warn('LocalStorage save error:', e);
+    console.warn('LocalStorage save warning:', e);
   }
 
   // 2. Update local registry
@@ -118,7 +96,9 @@ export async function renameGameById(gameId: string, newName: string): Promise<b
     if (reg) localRegistry = JSON.parse(reg);
   } catch {}
 
-  const updated = localRegistry.map(g => g.id === cleanId ? { ...g, name: cleanName, updatedAt: Date.now() } : g);
+  const updated = localRegistry.map((g) =>
+    g.id === cleanId ? { ...g, name: cleanName, updatedAt: Date.now() } : g
+  );
   localStorage.setItem(REGISTRY_KEY, JSON.stringify(updated));
   return true;
 }
@@ -131,19 +111,6 @@ export async function loadGameData(gameId: string): Promise<GameSaveData | null>
     const local = localStorage.getItem(`${LOCAL_GAMES_PREFIX}${cleanId}`);
     if (local) {
       return JSON.parse(local);
-    }
-  } catch {}
-
-  // Cloud fallback
-  try {
-    const cloudUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://api.npoint.io/apex_game_${cleanId}`)}`;
-    const response = await fetch(cloudUrl, { signal: AbortSignal.timeout(2000) });
-    if (response.ok) {
-      const data = await response.json();
-      if (data && data.id) {
-        localStorage.setItem(`${LOCAL_GAMES_PREFIX}${cleanId}`, JSON.stringify(data));
-        return data;
-      }
     }
   } catch {}
 
