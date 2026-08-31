@@ -19,28 +19,30 @@ export const StockChart: React.FC<StockChartProps> = ({
   onTimeRangeChange,
   isPositive = true,
   basePrice,
-  height = 240,
+  height = 230,
   showTimeSelector = true,
   positions = [],
 }) => {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
-  const [selectedPositionId, setSelectedPositionId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const points = data && data.length > 0 ? data : [];
 
-  // Determine min and max for scaling (incorporating position entry prices if relevant)
+  // Determine min and max for scaling
   const { minPrice, maxPrice, priceRange, isTrendUp } = useMemo(() => {
     if (points.length === 0) return { minPrice: 0, maxPrice: 100, priceRange: 100, isTrendUp: true };
     const prices = points.map((p) => p.price);
     
-    // Include entry prices in range calculation so markers never get clipped
+    // Include entry prices with mild margin so guidelines are always visible
     positions.forEach((pos) => {
       if (pos.entryPrice) prices.push(pos.entryPrice);
     });
 
-    const min = Math.min(...prices);
-    const max = Math.max(...prices);
+    const rawMin = Math.min(...prices);
+    const rawMax = Math.max(...prices);
+    const padding = (rawMax - rawMin) * 0.05 || 1;
+    const min = rawMin - padding;
+    const max = rawMax + padding;
     const range = max - min === 0 ? 1 : max - min;
     const firstPrice = points[0].price;
     const lastPrice = points[points.length - 1].price;
@@ -48,11 +50,11 @@ export const StockChart: React.FC<StockChartProps> = ({
     return { minPrice: min, maxPrice: max, priceRange: range, isTrendUp: up };
   }, [points, positions]);
 
-  // Dimensions
+  // SVG coordinate dimensions
   const svgWidth = 600;
   const svgHeight = height;
-  const paddingY = 28;
-  const paddingX = 14;
+  const paddingY = 20;
+  const paddingX = 10;
   const usableHeight = svgHeight - paddingY * 2;
   const usableWidth = svgWidth - paddingX * 2;
 
@@ -62,6 +64,12 @@ export const StockChart: React.FC<StockChartProps> = ({
   const activeDelta = activePoint ? activePoint.price - startPrice : 0;
   const activeDeltaPercent = startPrice > 0 && activePoint ? (activeDelta / startPrice) * 100 : 0;
   const activeIsUp = activeDelta >= 0;
+
+  // Check if scrubbing near a position entry
+  const scrubbedPosition = useMemo(() => {
+    if (!activePoint || positions.length === 0) return null;
+    return positions.find((pos) => Math.abs(pos.openedAt - activePoint.timestamp) <= 3600000);
+  }, [activePoint, positions]);
 
   // Generate SVG path coordinates
   const svgCoordinates = useMemo(() => {
@@ -74,49 +82,28 @@ export const StockChart: React.FC<StockChartProps> = ({
     });
   }, [points, minPrice, priceRange, svgHeight, usableHeight, usableWidth]);
 
-  // Map Position Markers onto the SVG coordinate space
-  const positionMarkers = useMemo(() => {
+  // Map Position Entry Guidelines
+  const entryGuidelines = useMemo(() => {
     if (points.length === 0 || positions.length === 0) return [];
 
-    const minTs = points[0].timestamp;
-    const maxTs = points[points.length - 1].timestamp;
-    const timeSpan = maxTs - minTs || 1;
-
     return positions.map((pos) => {
-      // Calculate X based on openedAt timestamp
-      let x = paddingX + usableWidth * 0.5; // fallback
-      let isWithinTimeRange = false;
-
-      if (pos.openedAt >= minTs && pos.openedAt <= maxTs) {
-        x = paddingX + ((pos.openedAt - minTs) / timeSpan) * usableWidth;
-        isWithinTimeRange = true;
-      } else if (pos.openedAt < minTs) {
-        // Opened before visible window: anchor to left side
-        x = paddingX + 16;
-        isWithinTimeRange = false;
-      } else {
-        // Opened recently
-        x = paddingX + usableWidth - 16;
-        isWithinTimeRange = true;
-      }
-
-      // Calculate Y based on entry price
       const normalizedY = Math.max(0, Math.min(1, (pos.entryPrice - minPrice) / priceRange));
       const y = svgHeight - paddingY - normalizedY * usableHeight;
-
       const isLong = pos.type === 'LONG';
       const color = isLong ? '#34C759' : '#FF9500';
+      const isProfitable = isLong
+        ? (activePoint ? activePoint.price >= pos.entryPrice : true)
+        : (activePoint ? activePoint.price <= pos.entryPrice : true);
 
       return {
         pos,
-        x,
         y,
-        isWithinTimeRange,
         isLong,
         color,
+        isProfitable,
       };
     });
-  }, [points, positions, minPrice, priceRange, svgHeight, usableHeight, usableWidth]);
+  }, [points, positions, minPrice, priceRange, svgHeight, usableHeight, usableWidth, activePoint]);
 
   // Construct authentic financial SVG path
   const { linePath, areaPath } = useMemo(() => {
@@ -168,6 +155,11 @@ export const StockChart: React.FC<StockChartProps> = ({
             <span className="text-zinc-400 font-normal">
               {hoverIndex !== null ? activePoint?.dateStr : `en ${timeRange}`}
             </span>
+            {scrubbedPosition && (
+              <span className="px-2 py-0.5 rounded-md bg-zinc-800 text-white font-mono text-[10px] border border-white/10">
+                Tu Entrada: {scrubbedPosition.type === 'LONG' ? 'Largo' : 'Corto'} @ {formatCurrency(scrubbedPosition.entryPrice)}
+              </span>
+            )}
           </div>
         </div>
 
@@ -217,93 +209,29 @@ export const StockChart: React.FC<StockChartProps> = ({
               d={linePath}
               fill="none"
               stroke={trendColor}
-              strokeWidth="2.75"
+              strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
               className="transition-all duration-150"
             />
           )}
 
-          {/* Trade Entry Position Guidelines & Markers */}
-          {positionMarkers.map((marker) => {
-            const isSelected = selectedPositionId === marker.pos.id;
-            const entryText = `${marker.isLong ? 'LARGO' : 'CORTO'} @ ${formatCurrency(marker.pos.entryPrice)}`;
-
-            return (
-              <g key={marker.pos.id} className="cursor-pointer" onClick={() => setSelectedPositionId(isSelected ? null : marker.pos.id)}>
-                {/* Horizontal Dashed Entry Guideline */}
-                <line
-                  x1={paddingX}
-                  y1={marker.y}
-                  x2={svgWidth - paddingX}
-                  y2={marker.y}
-                  stroke={marker.color}
-                  strokeWidth="1.2"
-                  strokeDasharray="4 3"
-                  strokeOpacity="0.75"
-                />
-
-                {/* Entry Price Tag on Right Edge */}
-                <g transform={`translate(${svgWidth - paddingX - 68}, ${marker.y - 10})`}>
-                  <rect
-                    width="66"
-                    height="18"
-                    rx="5"
-                    fill={marker.color}
-                    className="shadow-sm"
-                  />
-                  <text
-                    x="33"
-                    y="12"
-                    fill="#FFFFFF"
-                    fontSize="9"
-                    fontWeight="bold"
-                    textAnchor="middle"
-                    fontFamily="monospace"
-                  >
-                    {marker.isLong ? '▲ L ' : '▼ C '}
-                    {formatCurrency(marker.pos.entryPrice).replace('$', '')}
-                  </text>
-                </g>
-
-                {/* Position Marker Pin Point on the Chart */}
-                <circle
-                  cx={marker.x}
-                  cy={marker.y}
-                  r="7"
-                  fill={marker.color}
-                  stroke="#FFFFFF"
-                  strokeWidth="2.5"
-                  className="shadow-md"
-                />
-
-                {/* Pin label badge */}
-                <g transform={`translate(${Math.max(paddingX + 40, Math.min(svgWidth - paddingX - 60, marker.x))}, ${marker.y > 50 ? marker.y - 24 : marker.y + 20})`}>
-                  <rect
-                    x="-45"
-                    y="-10"
-                    width="90"
-                    height="20"
-                    rx="6"
-                    fill="#1C1C1E"
-                    stroke={marker.color}
-                    strokeWidth="1.2"
-                    fillOpacity="0.95"
-                  />
-                  <text
-                    x="0"
-                    y="3"
-                    fill="#FFFFFF"
-                    fontSize="9.5"
-                    fontWeight="bold"
-                    textAnchor="middle"
-                  >
-                    {entryText}
-                  </text>
-                </g>
-              </g>
-            );
-          })}
+          {/* Clean Horizontal Entry Level Guidelines */}
+          {entryGuidelines.map((guide) => (
+            <g key={guide.pos.id}>
+              {/* Thin Dashed Guideline */}
+              <line
+                x1={paddingX}
+                y1={guide.y}
+                x2={svgWidth - paddingX}
+                y2={guide.y}
+                stroke={guide.color}
+                strokeWidth="1.2"
+                strokeDasharray="3 3"
+                strokeOpacity="0.65"
+              />
+            </g>
+          ))}
 
           {/* Scrubber Vertical Line & Cursor */}
           {hoverIndex !== null && svgCoordinates[hoverIndex] && (
@@ -318,18 +246,42 @@ export const StockChart: React.FC<StockChartProps> = ({
                 strokeDasharray="4 4"
                 className="text-zinc-400/80 dark:text-zinc-500/80"
               />
-              <circle
-                cx={svgCoordinates[hoverIndex].x}
-                cy={svgCoordinates[hoverIndex].y}
-                r="6"
-                fill={trendColor}
-                stroke="#FFFFFF"
-                strokeWidth="2.5"
-                className="shadow-md"
-              />
             </g>
           )}
         </svg>
+
+        {/* HTML Overlays for crisp badges without SVG aspect-ratio distortion */}
+        {entryGuidelines.map((guide) => {
+          const topPercent = (guide.y / svgHeight) * 100;
+          return (
+            <div
+              key={guide.pos.id}
+              className="absolute right-2 pointer-events-none -translate-y-1/2 flex items-center gap-1"
+              style={{ top: `${topPercent}%` }}
+            >
+              <div
+                className={`px-2 py-0.5 rounded-md text-[10px] font-bold font-mono text-white shadow-sm flex items-center gap-1 ${
+                  guide.isLong ? 'bg-ios-green' : 'bg-ios-orange'
+                }`}
+              >
+                <span>{guide.isLong ? '▲ LARGO' : '▼ CORTO'}</span>
+                <span>{formatCurrency(guide.pos.entryPrice)}</span>
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Scrubber Cursor Point */}
+        {hoverIndex !== null && svgCoordinates[hoverIndex] && (
+          <div
+            className="absolute w-3.5 h-3.5 rounded-full border-2 border-white pointer-events-none shadow-md -translate-x-1/2 -translate-y-1/2"
+            style={{
+              left: `${(svgCoordinates[hoverIndex].x / svgWidth) * 100}%`,
+              top: `${(svgCoordinates[hoverIndex].y / svgHeight) * 100}%`,
+              backgroundColor: trendColor,
+            }}
+          />
+        )}
       </div>
 
       {/* iOS Timeframe Segmented Switcher */}
