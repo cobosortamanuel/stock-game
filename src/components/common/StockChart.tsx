@@ -65,7 +65,7 @@ export const StockChart: React.FC<StockChartProps> = ({
     });
   }, [points, minPrice, priceRange, svgHeight, usableHeight, usableWidth]);
 
-  // Construct smooth bezier SVG path
+  // Construct authentic financial SVG path
   const { linePath, areaPath } = useMemo(() => {
     if (svgCoordinates.length === 0) return { linePath: '', areaPath: '' };
     if (svgCoordinates.length === 1) {
@@ -73,17 +73,10 @@ export const StockChart: React.FC<StockChartProps> = ({
       return { linePath: `M ${p.x} ${p.y}`, areaPath: '' };
     }
 
-    let d = `M ${svgCoordinates[0].x} ${svgCoordinates[0].y}`;
-    for (let i = 0; i < svgCoordinates.length - 1; i++) {
-      const curr = svgCoordinates[i];
-      const next = svgCoordinates[i + 1];
-      const cx = (curr.x + next.x) / 2;
-      d += ` C ${cx} ${curr.y}, ${cx} ${next.y}, ${next.x} ${next.y}`;
-    }
-
+    const d = `M ` + svgCoordinates.map((c) => `${c.x.toFixed(2)} ${c.y.toFixed(2)}`).join(' L ');
     const lastCoord = svgCoordinates[svgCoordinates.length - 1];
     const firstCoord = svgCoordinates[0];
-    const area = `${d} L ${lastCoord.x} ${svgHeight} L ${firstCoord.x} ${svgHeight} Z`;
+    const area = `${d} L ${lastCoord.x.toFixed(2)} ${svgHeight} L ${firstCoord.x.toFixed(2)} ${svgHeight} Z`;
 
     return { linePath: d, areaPath: area };
   }, [svgCoordinates, svgHeight]);

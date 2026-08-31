@@ -60,7 +60,7 @@ function getTimeRangeParams(range: TimeRange): { range: string; interval: string
     case '1W':
       return { range: '5d', interval: '15m' };
     case '1M':
-      return { range: '1mo', interval: '1d' };
+      return { range: '1mo', interval: '60m' };
     case '1Y':
       return { range: '1y', interval: '1d' };
     case '5Y':
@@ -75,74 +75,75 @@ function getTimeRangeParams(range: TimeRange): { range: string; interval: string
 function generateSyntheticChart(symbol: string, range: TimeRange, currentPrice: number): ChartPoint[] {
   const points: ChartPoint[] = [];
   const now = Date.now();
-  let count = 60;
+  let count = 80;
   let intervalMs = 5 * 60 * 1000;
   let volatility = 0.008;
-  let waveFrequency = 3;
+  let waveFrequency = 4;
 
   switch (range) {
     case '1H':
       count = 60;
       intervalMs = 60 * 1000;
       volatility = 0.003;
-      waveFrequency = 2;
+      waveFrequency = 2.5;
       break;
     case '1D':
       count = 78;
       intervalMs = 5 * 60 * 1000;
       volatility = 0.006;
-      waveFrequency = 3.5;
-      break;
-    case '1W':
-      count = 45;
-      intervalMs = 3 * 3600 * 1000;
-      volatility = 0.015;
       waveFrequency = 4;
       break;
-    case '1M':
-      count = 60;
-      intervalMs = 12 * 3600 * 1000;
-      volatility = 0.028;
+    case '1W':
+      count = 80;
+      intervalMs = 90 * 60 * 1000;
+      volatility = 0.014;
       waveFrequency = 5;
       break;
-    case '1Y':
-      count = 75;
-      intervalMs = 5 * 24 * 3600 * 1000;
-      volatility = 0.055;
-      waveFrequency = 6;
-      break;
-    case '5Y':
-      count = 90;
-      intervalMs = 20 * 24 * 3600 * 1000;
-      volatility = 0.09;
+    case '1M':
+      count = 120; // 4 points per day x 30 days = 120 points (high detail)
+      intervalMs = 6 * 3600 * 1000;
+      volatility = 0.022;
       waveFrequency = 7;
       break;
-    case 'ALL':
+    case '1Y':
       count = 100;
-      intervalMs = 45 * 24 * 3600 * 1000;
-      volatility = 0.16;
+      intervalMs = 3.5 * 24 * 3600 * 1000;
+      volatility = 0.045;
       waveFrequency = 8;
+      break;
+    case '5Y':
+      count = 110;
+      intervalMs = 16 * 24 * 3600 * 1000;
+      volatility = 0.08;
+      waveFrequency = 9;
+      break;
+    case 'ALL':
+      count = 120;
+      intervalMs = 30 * 24 * 3600 * 1000;
+      volatility = 0.14;
+      waveFrequency = 11;
       break;
   }
 
-  let seed = symbol.split('').reduce((acc, char, idx) => acc + char.charCodeAt(0) * (idx + 1) * 17, 31415);
+  let seed = symbol.split('').reduce((acc, char, idx) => acc + char.charCodeAt(0) * (idx + 2) * 23, 48291);
   const pseudoRand = () => {
     seed = (seed * 9301 + 49297) % 233280;
     return seed / 233280;
   };
 
-  // Generate realistic market price trajectory
+  // Generate realistic market price trajectory with intraday micro-structure
   const rawPrices: number[] = [];
-  let p = currentPrice * (1 - (pseudoRand() - 0.46) * volatility * 3.5);
+  let p = currentPrice * (1 - (pseudoRand() - 0.46) * volatility * 3.8);
   if (p <= 0.1) p = currentPrice * 0.85;
 
   for (let i = 0; i < count; i++) {
     const progress = i / (count - 1);
-    const wave = Math.sin(progress * Math.PI * waveFrequency + (seed % 10)) * (volatility * 0.8 * currentPrice);
-    const noise = (pseudoRand() - 0.495) * (volatility * 0.6 * currentPrice);
+    const harmonic1 = Math.sin(progress * Math.PI * waveFrequency + (seed % 7)) * (volatility * 0.5 * currentPrice);
+    const harmonic2 = Math.cos(progress * Math.PI * (waveFrequency * 2.3) + (seed % 13)) * (volatility * 0.3 * currentPrice);
+    const noise = (pseudoRand() - 0.495) * (volatility * 0.7 * currentPrice);
     const drift = (currentPrice - p) / (count - i);
     
-    p = p + drift + wave * 0.25 + noise;
+    p = p + drift + harmonic1 * 0.3 + harmonic2 * 0.2 + noise;
     if (i === count - 1) {
       p = currentPrice;
     }
@@ -154,6 +155,8 @@ function generateSyntheticChart(symbol: string, range: TimeRange, currentPrice: 
     const date = new Date(timestamp);
     const dateStr = (range === '1H' || range === '1D')
       ? date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+      : (range === '1W' || range === '1M')
+      ? date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
       : date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric', year: range === '5Y' || range === 'ALL' ? '2-digit' : undefined });
 
     const price = Number(rawPrices[i].toFixed(2));
@@ -222,6 +225,8 @@ export async function fetchStockData(symbol: string, range: TimeRange = '1D'): P
               const date = new Date(ts);
               const dateStr = (range === '1H' || range === '1D')
                 ? date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+                : (range === '1W' || range === '1M')
+                ? date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
                 : date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric', year: range === '5Y' || range === 'ALL' ? '2-digit' : undefined });
 
               chartPoints.push({
