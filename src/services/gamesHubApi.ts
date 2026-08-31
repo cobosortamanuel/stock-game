@@ -1,4 +1,11 @@
 import { GameSaveData, GameSummary } from '../types/market';
+import {
+  isCloudConnected,
+  fetchGamesFromSupabase,
+  fetchGameDataFromSupabase,
+  saveGameToSupabase,
+  deleteGameFromSupabase,
+} from './supabaseService';
 
 const REGISTRY_KEY = 'apex_games_registry_v8';
 const LOCAL_GAMES_PREFIX = 'apex_game_save_v8_';
@@ -13,7 +20,7 @@ export function generateGameId(): string {
   return id;
 }
 
-// Synchronous fetch of games registry
+// Synchronous fetch of local games registry
 export function getAllGamesSync(): GameSummary[] {
   try {
     const local = localStorage.getItem(REGISTRY_KEY);
@@ -27,12 +34,35 @@ export function getAllGamesSync(): GameSummary[] {
   return [];
 }
 
-// Fetch all games async wrapper
+// Fetch all games (Supabase Cloud if connected + Local Cache)
 export async function fetchAllGames(): Promise<GameSummary[]> {
-  return getAllGamesSync();
+  const localGames = getAllGamesSync();
+
+  if (isCloudConnected()) {
+    try {
+      const cloudGames = await fetchGamesFromSupabase();
+      if (cloudGames && cloudGames.length > 0) {
+        const map = new Map<string, GameSummary>();
+        localGames.forEach((g) => map.set(g.id, g));
+        cloudGames.forEach((cg) => {
+          const existing = map.get(cg.id);
+          if (!existing || cg.updatedAt >= existing.updatedAt) {
+            map.set(cg.id, cg);
+          }
+        });
+        const merged = Array.from(map.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+        try {
+          localStorage.setItem(REGISTRY_KEY, JSON.stringify(merged));
+        } catch {}
+        return merged;
+      }
+    } catch {}
+  }
+
+  return localGames;
 }
 
-// Synchronous fetch of single game data
+// Synchronous fetch of single game data from local storage
 export function getSavedGameSync(gameId: string): GameSaveData | null {
   const cleanId = gameId.trim().toUpperCase();
   try {
@@ -45,7 +75,7 @@ export function getSavedGameSync(gameId: string): GameSaveData | null {
   return null;
 }
 
-// Synchronous immediate local persistence
+// Synchronous local persistence + background Supabase sync
 export function syncGameToCloudAndLocal(game: GameSaveData): boolean {
   if (!game || !game.id) return false;
 
@@ -68,7 +98,7 @@ export function syncGameToCloudAndLocal(game: GameSaveData): boolean {
     updatedAt: summary.updatedAt,
   };
 
-  // 1. Instant local persistence
+  // 1. Instant local persistence (Synchronous 0ms)
   try {
     localStorage.setItem(`${LOCAL_GAMES_PREFIX}${game.id}`, JSON.stringify(fullData));
   } catch (e) {
@@ -86,6 +116,11 @@ export function syncGameToCloudAndLocal(game: GameSaveData): boolean {
     localStorage.setItem(REGISTRY_KEY, JSON.stringify(updatedRegistry));
   } catch {}
 
+  // 3. Background Cloud Sync (if Supabase is connected)
+  if (isCloudConnected()) {
+    saveGameToSupabase(fullData).catch(() => {});
+  }
+
   return true;
 }
 
@@ -95,7 +130,7 @@ export async function renameGameById(gameId: string, newName: string): Promise<b
   const cleanName = newName.trim();
   if (!cleanName) return false;
 
-  const existing = getSavedGameSync(cleanId);
+  const existing = await loadGameData(cleanId);
   if (existing) {
     existing.name = cleanName;
     existing.updatedAt = Date.now();
@@ -116,7 +151,26 @@ export async function renameGameById(gameId: string, newName: string): Promise<b
 
 // Load a specific game's full data
 export async function loadGameData(gameId: string): Promise<GameSaveData | null> {
-  return getSavedGameSync(gameId);
+  const cleanId = gameId.trim().toUpperCase();
+
+  // Try local first (instant)
+  const local = getSavedGameSync(cleanId);
+  if (local) return local;
+
+  // If not found locally and cloud is connected, load from Supabase
+  if (isCloudConnected()) {
+    try {
+      const cloudData = await fetchGameDataFromSupabase(cleanId);
+      if (cloudData) {
+        try {
+          localStorage.setItem(`${LOCAL_GAMES_PREFIX}${cleanId}`, JSON.stringify(cloudData));
+        } catch {}
+        return cloudData;
+      }
+    } catch {}
+  }
+
+  return null;
 }
 
 // Delete a game
@@ -129,6 +183,10 @@ export async function deleteGameById(gameId: string): Promise<boolean> {
     const updatedRegistry = registry.filter((g) => g.id !== cleanId);
     localStorage.setItem(REGISTRY_KEY, JSON.stringify(updatedRegistry));
   } catch {}
+
+  if (isCloudConnected()) {
+    deleteGameFromSupabase(cleanId).catch(() => {});
+  }
 
   return true;
 }
