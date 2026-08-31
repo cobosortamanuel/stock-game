@@ -195,7 +195,7 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
                         isProfitable ? 'text-ios-green' : 'text-ios-red'
                       }`}
                     >
-                      {isProfitable ? '+' : ''}{formatPercent(pos.unrealizedPnLPercent)}
+                      {formatPercent(pos.unrealizedPnLPercent)}
                     </div>
                   </div>
                 </div>
