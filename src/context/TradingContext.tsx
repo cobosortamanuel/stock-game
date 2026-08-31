@@ -264,9 +264,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         symbolsToFetch.map(async (sym) => {
           try {
             const data = await fetchStockData(sym, '1D');
-            quotesMap[sym] = data.quote;
-          } catch (e) {
-            console.error(`Quote sync error for ${sym}`, e);
+            if (data && data.quote) {
+              quotesMap[sym] = data.quote;
+            }
+          } catch {
+            // Silently handle
           }
         })
       );
