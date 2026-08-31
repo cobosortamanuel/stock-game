@@ -17,13 +17,8 @@ Deno.serve(async (req: Request) => {
     const interval = url.searchParams.get('interval') || '5m';
 
     const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}`;
-    
-    const response = await fetch(targetUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'application/json',
-      },
-    });
+
+    const response = await fetch(targetUrl);
 
     if (!response.ok) {
       return new Response(
