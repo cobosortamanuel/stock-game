@@ -18,13 +18,13 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="sticky top-0 z-30 w-full pt-safe ios-glass-header border-b border-black/5 dark:border-white/10 transition-colors duration-200">
       <div className="max-w-md mx-auto px-4 h-14 flex items-center justify-between">
-        {/* Title / Active Game Pill */}
+        {/* Title / Active Game Info */}
         <div className="flex items-center gap-2.5">
           <button
             type="button"
             onClick={openLobby}
             className="flex items-center gap-2 text-left group ios-active"
-            title="Toca para cambiar o crear partida"
+            title="Cambiar o crear partida"
           >
             <div className="w-8 h-8 rounded-xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 flex items-center justify-center font-bold text-sm tracking-wider shadow-sm group-hover:scale-105 transition-transform">
               AT
@@ -33,8 +33,8 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="text-sm font-bold text-zinc-900 dark:text-zinc-50 leading-tight block truncate max-w-[150px] sm:max-w-[200px]">
                 {activeGameName || title}
               </span>
-              <p className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium">
-                Partida • Toca para cambiar
+              <p className="text-[11px] text-ios-blue font-bold tracking-tight">
+                Partida
               </p>
             </div>
           </button>
