@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Position, TradeRecord, PositionType, StockQuote, GameSummary, GameSaveData } from '../types/market';
 import { fetchStockData } from '../services/marketApi';
-import { fetchAllGames, syncGameToCloudAndLocal, loadGameData, deleteGameById, renameGameById, generateGameId } from '../services/gamesHubApi';
+import { fetchAllGames, syncGameToCloudAndLocal, loadGameData, deleteGameById, renameGameById, generateGameId, getSavedGameSync, getAllGamesSync } from '../services/gamesHubApi';
 
 interface TradingContextType {
   // Theme
@@ -67,8 +67,8 @@ interface TradingContextType {
 const TradingContext = createContext<TradingContextType | undefined>(undefined);
 
 const STORAGE_KEYS = {
-  ACTIVE_GAME_ID: 'apex_active_game_id_v3',
-  THEME: 'apex_theme_v3',
+  ACTIVE_GAME_ID: 'apex_active_game_id_v8',
+  THEME: 'apex_theme_v8',
 };
 
 const DEFAULT_INITIAL_BALANCE = 100000;
@@ -120,28 +120,42 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
+  // Synchronous Initial Game Hydration
+  const initialGameData = useMemo(() => {
+    const savedId = localStorage.getItem(STORAGE_KEYS.ACTIVE_GAME_ID);
+    if (savedId) {
+      const data = getSavedGameSync(savedId);
+      if (data) return data;
+    }
+    const all = getAllGamesSync();
+    if (all.length > 0) {
+      const first = getSavedGameSync(all[0].id);
+      if (first) return first;
+    }
+    return null;
+  }, []);
+
   // Games Hub State
-  const [gamesList, setGamesList] = useState<GameSummary[]>([]);
-  const [isLoadingGames, setIsLoadingGames] = useState<boolean>(true);
-  const [activeGameId, setActiveGameId] = useState<string | null>(() => {
-    return localStorage.getItem(STORAGE_KEYS.ACTIVE_GAME_ID) || null;
-  });
-  const [activeGameName, setActiveGameName] = useState<string>('Partida Principal');
+  const [gamesList, setGamesList] = useState<GameSummary[]>(() => getAllGamesSync());
+  const [isLoadingGames, setIsLoadingGames] = useState<boolean>(false);
+  const [activeGameId, setActiveGameId] = useState<string | null>(() => initialGameData?.id || null);
+  const [activeGameName, setActiveGameName] = useState<string>(() => initialGameData?.name || 'Partida Principal');
   const [isLobbyOpen, setIsLobbyOpen] = useState<boolean>(false);
 
-  // Active Game In-Memory State
-  const [initialCash, setInitialCash] = useState<number>(DEFAULT_INITIAL_BALANCE);
-  const [cashAvailable, setCashAvailable] = useState<number>(DEFAULT_INITIAL_BALANCE);
-  const [positions, setPositions] = useState<Position[]>([]);
-  const [tradeHistory, setTradeHistory] = useState<TradeRecord[]>([]);
-  const [watchlist, setWatchlist] = useState<string[]>(DEFAULT_WATCHLIST);
+  // Active Game In-Memory State (Initialized directly with saved game)
+  const [initialCash, setInitialCash] = useState<number>(() => initialGameData?.initialCash ?? DEFAULT_INITIAL_BALANCE);
+  const [cashAvailable, setCashAvailable] = useState<number>(() => initialGameData?.cashAvailable ?? DEFAULT_INITIAL_BALANCE);
+  const [positions, setPositions] = useState<Position[]>(() => initialGameData?.positions || []);
+  const [tradeHistory, setTradeHistory] = useState<TradeRecord[]>(() => initialGameData?.tradeHistory || []);
+  const [watchlist, setWatchlist] = useState<string[]>(() => initialGameData?.watchlist || DEFAULT_WATCHLIST);
 
   const [liveQuotes, setLiveQuotes] = useState<Record<string, StockQuote>>({});
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
   const hasInitialized = useRef(false);
+  const isHydrated = useRef(false);
 
-  // Fetch games list from cloud & local registry
+  // Fetch games list
   const fetchGamesList = useCallback(async () => {
     setIsLoadingGames(true);
     try {
@@ -192,7 +206,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       watchlist: DEFAULT_WATCHLIST,
     };
 
-    await syncGameToCloudAndLocal(newGame);
+    syncGameToCloudAndLocal(newGame);
     await fetchGamesList();
     await switchGame(id);
   }, [fetchGamesList, switchGame]);
@@ -214,7 +228,6 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (updatedList.length > 0) {
         await switchGame(updatedList[0].id);
       } else {
-        // If no games left, clear active game
         setActiveGameId(null);
         setActiveGameName('Sin Partidas');
         setPositions([]);
@@ -224,27 +237,18 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, [activeGameId, fetchGamesList, switchGame]);
 
-  // App Initialization: Load games and activate selected or open lobby
+  // App Initialization: Ensure at least one game exists
   useEffect(() => {
     if (hasInitialized.current) return;
     hasInitialized.current = true;
 
-    const init = async () => {
-      const list = await fetchGamesList();
-      const savedActiveId = localStorage.getItem(STORAGE_KEYS.ACTIVE_GAME_ID);
-
-      if (savedActiveId && list.some((g) => g.id === savedActiveId)) {
-        await switchGame(savedActiveId);
-      } else if (list.length > 0) {
-        await switchGame(list[0].id);
-      } else {
-        // Automatically create initial default game
-        await createGame('Partida Principal', DEFAULT_INITIAL_BALANCE);
-      }
-    };
-
-    init();
-  }, [fetchGamesList, switchGame, createGame]);
+    const existing = getAllGamesSync();
+    if (existing.length === 0) {
+      createGame('Partida Principal', DEFAULT_INITIAL_BALANCE);
+    } else if (!activeGameId) {
+      switchGame(existing[0].id);
+    }
+  }, [createGame, switchGame, activeGameId]);
 
   // Sync Quotes
   const refreshMarketData = useCallback(async () => {
@@ -337,7 +341,6 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
               pnlPct = pos.entryPrice > 0 ? ((curPrice - pos.entryPrice) / pos.entryPrice) * 100 : 0;
               curVal = pos.shares * curPrice;
             } else {
-              // SHORT: Win when price drops (entryPrice > curPrice)
               pnl = (pos.entryPrice - curPrice) * pos.shares;
               pnlPct = pos.entryPrice > 0 ? ((pos.entryPrice - curPrice) / pos.entryPrice) * 100 : 0;
               curVal = pos.investedAmount + pnl;
@@ -414,6 +417,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Auto-sync game to storage whenever state changes
   useEffect(() => {
+    if (!isHydrated.current) {
+      isHydrated.current = true;
+      return;
+    }
     if (!activeGameId) return;
 
     const gamePayload: GameSaveData = {

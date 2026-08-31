@@ -1,7 +1,7 @@
 import { GameSaveData, GameSummary } from '../types/market';
 
-const REGISTRY_KEY = 'apex_games_registry_v7';
-const LOCAL_GAMES_PREFIX = 'apex_game_save_v7_';
+const REGISTRY_KEY = 'apex_games_registry_v8';
+const LOCAL_GAMES_PREFIX = 'apex_game_save_v8_';
 
 // Unique 6-character game code generator
 export function generateGameId(): string {
@@ -13,8 +13,8 @@ export function generateGameId(): string {
   return id;
 }
 
-// Fetch all games (Local Storage - Instant 0ms, Zero Rate Limits)
-export async function fetchAllGames(): Promise<GameSummary[]> {
+// Synchronous fetch of games registry
+export function getAllGamesSync(): GameSummary[] {
   try {
     const local = localStorage.getItem(REGISTRY_KEY);
     if (local) {
@@ -24,16 +24,35 @@ export async function fetchAllGames(): Promise<GameSummary[]> {
       }
     }
   } catch {}
-
   return [];
+}
+
+// Fetch all games async wrapper
+export async function fetchAllGames(): Promise<GameSummary[]> {
+  return getAllGamesSync();
+}
+
+// Synchronous fetch of single game data
+export function getSavedGameSync(gameId: string): GameSaveData | null {
+  const cleanId = gameId.trim().toUpperCase();
+  try {
+    const local = localStorage.getItem(`${LOCAL_GAMES_PREFIX}${cleanId}`);
+    if (local) {
+      const parsed = JSON.parse(local);
+      if (parsed && parsed.id) return parsed;
+    }
+  } catch {}
+  return null;
 }
 
 // Synchronous immediate local persistence
 export function syncGameToCloudAndLocal(game: GameSaveData): boolean {
+  if (!game || !game.id) return false;
+
   const summary: GameSummary = {
     id: game.id,
     name: game.name,
-    createdAt: game.createdAt,
+    createdAt: game.createdAt || Date.now(),
     updatedAt: Date.now(),
     initialCash: game.initialCash,
     cashAvailable: game.cashAvailable,
@@ -57,12 +76,7 @@ export function syncGameToCloudAndLocal(game: GameSaveData): boolean {
   }
 
   // 2. Update local registry
-  let localRegistry: GameSummary[] = [];
-  try {
-    const reg = localStorage.getItem(REGISTRY_KEY);
-    if (reg) localRegistry = JSON.parse(reg);
-  } catch {}
-
+  let localRegistry = getAllGamesSync();
   const updatedRegistry = [
     summary,
     ...localRegistry.filter((g) => g.id !== game.id),
@@ -81,7 +95,7 @@ export async function renameGameById(gameId: string, newName: string): Promise<b
   const cleanName = newName.trim();
   if (!cleanName) return false;
 
-  const existing = await loadGameData(cleanId);
+  const existing = getSavedGameSync(cleanId);
   if (existing) {
     existing.name = cleanName;
     existing.updatedAt = Date.now();
@@ -89,12 +103,7 @@ export async function renameGameById(gameId: string, newName: string): Promise<b
     return true;
   }
 
-  let localRegistry: GameSummary[] = [];
-  try {
-    const reg = localStorage.getItem(REGISTRY_KEY);
-    if (reg) localRegistry = JSON.parse(reg);
-  } catch {}
-
+  let localRegistry = getAllGamesSync();
   const updated = localRegistry.map((g) =>
     g.id === cleanId ? { ...g, name: cleanName, updatedAt: Date.now() } : g
   );
@@ -107,17 +116,7 @@ export async function renameGameById(gameId: string, newName: string): Promise<b
 
 // Load a specific game's full data
 export async function loadGameData(gameId: string): Promise<GameSaveData | null> {
-  const cleanId = gameId.trim().toUpperCase();
-
-  try {
-    const local = localStorage.getItem(`${LOCAL_GAMES_PREFIX}${cleanId}`);
-    if (local) {
-      const parsed = JSON.parse(local);
-      if (parsed && parsed.id) return parsed;
-    }
-  } catch {}
-
-  return null;
+  return getSavedGameSync(gameId);
 }
 
 // Delete a game
@@ -126,9 +125,7 @@ export async function deleteGameById(gameId: string): Promise<boolean> {
 
   try {
     localStorage.removeItem(`${LOCAL_GAMES_PREFIX}${cleanId}`);
-    let registry: GameSummary[] = [];
-    const reg = localStorage.getItem(REGISTRY_KEY);
-    if (reg) registry = JSON.parse(reg);
+    let registry = getAllGamesSync();
     const updatedRegistry = registry.filter((g) => g.id !== cleanId);
     localStorage.setItem(REGISTRY_KEY, JSON.stringify(updatedRegistry));
   } catch {}
