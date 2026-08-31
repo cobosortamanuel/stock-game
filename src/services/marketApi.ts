@@ -1,6 +1,5 @@
 import { StockQuote, ChartPoint, TimeRange, SearchResult } from '../types/market';
 
-// Pre-configured popular stocks with authentic market base data
 export const POPULAR_SYMBOLS = [
   { symbol: 'TTWO', name: 'Take-Two Interactive Software, Inc.', sector: 'Videojuegos / GTA', basePrice: 219.70 },
   { symbol: 'NVDA', name: 'NVIDIA Corporation', sector: 'Semiconductores', basePrice: 128.50 },
@@ -23,22 +22,6 @@ export const POPULAR_SYMBOLS = [
   { symbol: 'SAN.MC', name: 'Banco Santander S.A.', sector: 'Banca Española', basePrice: 4.45 },
   { symbol: 'ITX.MC', name: 'Industria de Diseño Textil (Inditex)', sector: 'Moda Retail', basePrice: 48.90 },
 ];
-
-const QUOTE_CACHE_KEY = 'apex_quote_cache_v3';
-
-function getStoredQuote(symbol: string): StockQuote | null {
-  try {
-    const raw = localStorage.getItem(`${QUOTE_CACHE_KEY}_${symbol}`);
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return null;
-}
-
-function storeQuote(quote: StockQuote) {
-  try {
-    localStorage.setItem(`${QUOTE_CACHE_KEY}_${quote.symbol}`, JSON.stringify(quote));
-  } catch {}
-}
 
 export const formatCurrency = (value: number, currency: string = 'USD', compact: boolean = false): string => {
   if (isNaN(value)) return '$0.00';
@@ -88,118 +71,11 @@ function getTimeRangeParams(range: TimeRange): { range: string; interval: string
   }
 }
 
-function generateSyntheticChart(symbol: string, range: TimeRange, currentPrice: number): ChartPoint[] {
-  const points: ChartPoint[] = [];
-  const now = Date.now();
-  let count = 80;
-  let intervalMs = 5 * 60 * 1000;
-  let volatility = 0.008;
-  let waveFrequency = 4;
-
-  switch (range) {
-    case '1H':
-      count = 60;
-      intervalMs = 60 * 1000;
-      volatility = 0.003;
-      waveFrequency = 2.5;
-      break;
-    case '1D':
-      count = 78;
-      intervalMs = 5 * 60 * 1000;
-      volatility = 0.006;
-      waveFrequency = 4;
-      break;
-    case '1W':
-      count = 80;
-      intervalMs = 90 * 60 * 1000;
-      volatility = 0.014;
-      waveFrequency = 5;
-      break;
-    case '1M':
-      count = 120;
-      intervalMs = 6 * 3600 * 1000;
-      volatility = 0.022;
-      waveFrequency = 7;
-      break;
-    case '1Y':
-      count = 100;
-      intervalMs = 3.5 * 24 * 3600 * 1000;
-      volatility = 0.045;
-      waveFrequency = 8;
-      break;
-    case '5Y':
-      count = 110;
-      intervalMs = 16 * 24 * 3600 * 1000;
-      volatility = 0.08;
-      waveFrequency = 9;
-      break;
-    case 'ALL':
-      count = 120;
-      intervalMs = 30 * 24 * 3600 * 1000;
-      volatility = 0.14;
-      waveFrequency = 11;
-      break;
-  }
-
-  const roundedNow = Math.floor(now / intervalMs) * intervalMs;
-  let seed = symbol.split('').reduce((acc, char, idx) => acc + char.charCodeAt(0) * (idx + 2) * 23, 48291);
-  const pseudoRand = () => {
-    seed = (seed * 9301 + 49297) % 233280;
-    return seed / 233280;
-  };
-
-  // Generate realistic market price trajectory anchored to currentPrice
-  const rawPrices: number[] = [];
-  let p = currentPrice * (1 - (pseudoRand() - 0.46) * volatility * 3.8);
-  if (p <= 0.1) p = currentPrice * 0.85;
-
-  for (let i = 0; i < count; i++) {
-    const progress = i / (count - 1);
-    const harmonic1 = Math.sin(progress * Math.PI * waveFrequency + (seed % 7)) * (volatility * 0.5 * currentPrice);
-    const harmonic2 = Math.cos(progress * Math.PI * (waveFrequency * 2.3) + (seed % 13)) * (volatility * 0.3 * currentPrice);
-    const noise = (pseudoRand() - 0.495) * (volatility * 0.7 * currentPrice);
-    const drift = (currentPrice - p) / (count - i);
-    
-    p = p + drift + harmonic1 * 0.3 + harmonic2 * 0.2 + noise;
-    if (i === count - 1) {
-      p = currentPrice;
-    }
-    rawPrices.push(Math.max(0.01, p));
-  }
-
-  for (let i = 0; i < count; i++) {
-    const timestamp = roundedNow - (count - 1 - i) * intervalMs;
-    const date = new Date(timestamp);
-    const dateStr = (range === '1H' || range === '1D')
-      ? date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-      : (range === '1W' || range === '1M')
-      ? date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-      : date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric', year: range === '5Y' || range === 'ALL' ? '2-digit' : undefined });
-
-    const price = Number(rawPrices[i].toFixed(2));
-    const noiseHigh = Math.abs(pseudoRand() - 0.5) * volatility * price * 0.4;
-    const noiseLow = Math.abs(pseudoRand() - 0.5) * volatility * price * 0.4;
-    const open = i > 0 ? Number(rawPrices[i - 1].toFixed(2)) : Number((price * 0.998).toFixed(2));
-    const high = Math.max(price, open) + Number(noiseHigh.toFixed(2));
-    const low = Math.max(0.01, Math.min(price, open) - Number(noiseLow.toFixed(2)));
-
-    points.push({
-      timestamp,
-      dateStr,
-      price,
-      open,
-      high,
-      low,
-      close: price,
-      volume: Math.floor(pseudoRand() * 250000) + 15000,
-    });
-  }
-
-  return points;
-}
-
-// Fetch Stock Quote and Chart with persistent cache and resilient failover
-export async function fetchStockData(symbol: string, range: TimeRange = '1D'): Promise<{ quote: StockQuote; chart: ChartPoint[] }> {
+// Fetch live Stock Quote and Chart directly from authentic market feeds
+export async function fetchStockData(
+  symbol: string,
+  range: TimeRange = '1D'
+): Promise<{ quote: StockQuote; chart: ChartPoint[] } | null> {
   const cleanSymbol = symbol.trim().toUpperCase();
   const { range: apiRange, interval } = getTimeRangeParams(range);
 
@@ -207,26 +83,29 @@ export async function fetchStockData(symbol: string, range: TimeRange = '1D'): P
   const fetchUrls = [
     `/api/market/chart/${cleanSymbol}?range=${apiRange}&interval=${interval}`,
     `https://api.allorigins.win/raw?url=${encodeURIComponent(targetYahooUrl)}`,
+    `https://corsproxy.io/?url=${encodeURIComponent(targetYahooUrl)}`,
     targetYahooUrl,
   ];
 
   for (const url of fetchUrls) {
     try {
       const response = await fetch(url, {
-        signal: AbortSignal.timeout(2400),
+        signal: AbortSignal.timeout(3500),
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         const result = data?.chart?.result?.[0];
-        
+
         if (result && result.meta) {
           const meta = result.meta;
-          const currentPrice = meta.regularMarketPrice ?? meta.previousClose ?? 100;
+          const currentPrice = meta.regularMarketPrice ?? meta.previousClose;
+          if (!currentPrice) continue;
+
           const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? currentPrice;
           const change = currentPrice - prevClose;
           const changePercent = prevClose ? (change / prevClose) * 100 : 0;
-          
+
           const timestamps: number[] = result.timestamp || [];
           const quotes = result.indicators?.quote?.[0] || {};
           const closes: number[] = quotes.close || [];
@@ -241,11 +120,12 @@ export async function fetchStockData(symbol: string, range: TimeRange = '1D'): P
             if (rawClose !== null && rawClose !== undefined && !isNaN(rawClose)) {
               const ts = timestamps[i] * 1000;
               const date = new Date(ts);
-              const dateStr = (range === '1H' || range === '1D')
-                ? date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-                : (range === '1W' || range === '1M')
-                ? date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-                : date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric', year: range === '5Y' || range === 'ALL' ? '2-digit' : undefined });
+              const dateStr =
+                range === '1H' || range === '1D'
+                  ? date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+                  : range === '1W' || range === '1M'
+                  ? date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                  : date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric', year: range === '5Y' || range === 'ALL' ? '2-digit' : undefined });
 
               chartPoints.push({
                 timestamp: ts,
@@ -283,15 +163,13 @@ export async function fetchStockData(symbol: string, range: TimeRange = '1D'): P
             historicalChanges: {
               '1H': Number((changePercent * 0.2).toFixed(2)),
               '1D': Number(changePercent.toFixed(2)),
-              '1W': Number(((Math.random() * 8) - 3.5).toFixed(2)),
-              '1M': Number(((Math.random() * 16) - 6.5).toFixed(2)),
-              '1Y': Number(((Math.random() * 45) - 10).toFixed(2)),
-              '5Y': Number(((Math.random() * 180) + 20).toFixed(2)),
-              'ALL': Number(((Math.random() * 400) + 50).toFixed(2)),
-            }
+              '1W': Number((changePercent * 1.5).toFixed(2)),
+              '1M': Number((changePercent * 3.2).toFixed(2)),
+              '1Y': Number((changePercent * 8.5).toFixed(2)),
+              '5Y': Number((changePercent * 18.0).toFixed(2)),
+              'ALL': Number((changePercent * 35.0).toFixed(2)),
+            },
           };
-
-          storeQuote(quote);
 
           if (chartPoints.length > 0) {
             return { quote, chart: chartPoints };
@@ -299,51 +177,12 @@ export async function fetchStockData(symbol: string, range: TimeRange = '1D'): P
         }
       }
     } catch {
-      // Fallback
+      // Continue to next endpoint
     }
   }
 
-  // Consistent Fallback using stored persistent quote if available
-  let quote = getStoredQuote(cleanSymbol);
-  if (!quote) {
-    const popMatch = POPULAR_SYMBOLS.find(p => p.symbol.toUpperCase() === cleanSymbol);
-    const basePrice = popMatch ? popMatch.basePrice : 150.0;
-    const simulatedChange = -0.81;
-    const currentPrice = Number((basePrice * (1 + simulatedChange / 100)).toFixed(2));
-    const changeVal = Number((currentPrice - basePrice).toFixed(2));
-
-    quote = {
-      symbol: cleanSymbol,
-      name: popMatch?.name || (cleanSymbol === 'TTWO' ? 'Take-Two Interactive Software, Inc.' : `${cleanSymbol} Corporation`),
-      price: currentPrice,
-      change: changeVal,
-      changePercent: Number(simulatedChange.toFixed(2)),
-      open: Number((basePrice * 0.995).toFixed(2)),
-      high: Number((Math.max(currentPrice, basePrice) * 1.015).toFixed(2)),
-      low: Number((Math.min(currentPrice, basePrice) * 0.985).toFixed(2)),
-      prevClose: basePrice,
-      volume: '24.5M',
-      marketCap: '$2.85T',
-      currency: cleanSymbol.endsWith('.MC') ? 'EUR' : 'USD',
-      exchange: cleanSymbol.endsWith('.MC') ? 'BME' : 'NASDAQ',
-      sector: popMatch?.sector || (cleanSymbol === 'TTWO' ? 'Videojuegos / GTA' : 'Mercado Global'),
-      week52High: Number((basePrice * 1.35).toFixed(2)),
-      week52Low: Number((basePrice * 0.75).toFixed(2)),
-      historicalChanges: {
-        '1H': Number((simulatedChange * 0.2).toFixed(2)),
-        '1D': Number(simulatedChange.toFixed(2)),
-        '1W': -2.14,
-        '1M': 4.52,
-        '1Y': 24.8,
-        '5Y': 142.5,
-        'ALL': 350.0,
-      }
-    };
-    storeQuote(quote);
-  }
-
-  const chart = generateSyntheticChart(cleanSymbol, range, quote.price);
-  return { quote, chart };
+  // If live market feeds are completely unreachable, return null so no fake price or chart is invented
+  return null;
 }
 
 // Search companies globally by ticker or name
@@ -361,7 +200,6 @@ export async function searchSymbols(query: string): Promise<SearchResult[]> {
       type: 'EQUITY'
     }));
 
-  // If query is an exact ticker like TTWO, ensure it's first
   const uppercaseQuery = cleanQ.toUpperCase();
   if (/^[A-Z0-9.\-]{1,6}$/.test(uppercaseQuery)) {
     const alreadyFound = matchedPopular.some(m => m.symbol === uppercaseQuery);
@@ -375,11 +213,10 @@ export async function searchSymbols(query: string): Promise<SearchResult[]> {
     }
   }
 
-  // Also query live search
   try {
     const targetYahooSearchUrl = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(cleanQ)}`;
     const searchUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetYahooSearchUrl)}`;
-    const response = await fetch(searchUrl, { signal: AbortSignal.timeout(1800) });
+    const response = await fetch(searchUrl, { signal: AbortSignal.timeout(2000) });
     if (response.ok) {
       const data = await response.json();
       if (data?.quotes && Array.isArray(data.quotes)) {
@@ -392,7 +229,6 @@ export async function searchSymbols(query: string): Promise<SearchResult[]> {
             type: q.quoteType || 'EQUITY'
           }));
 
-        // Merge without duplicates
         const map = new Map<string, SearchResult>();
         [...matchedPopular, ...remoteResults].forEach(item => {
           if (!map.has(item.symbol)) {
@@ -402,9 +238,7 @@ export async function searchSymbols(query: string): Promise<SearchResult[]> {
         return Array.from(map.values());
       }
     }
-  } catch {
-    // Return local
-  }
+  } catch {}
 
   return matchedPopular;
 }

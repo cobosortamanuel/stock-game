@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Star, TrendingUp, TrendingDown, Layers, Loader2, Clock } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { ArrowLeft, Star, TrendingUp, TrendingDown, Loader2, Clock, ShieldAlert, RefreshCw } from 'lucide-react';
 import { StockQuote, ChartPoint, TimeRange, PositionType } from '../types/market';
 import { fetchStockData, formatCurrency, formatPercent } from '../services/marketApi';
 import { StockChart } from '../components/common/StockChart';
@@ -20,36 +20,40 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
   const [quote, setQuote] = useState<StockQuote | null>(null);
   const [chartData, setChartData] = useState<ChartPoint[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [hasError, setHasError] = useState<boolean>(false);
   const [tradeModalOpen, setTradeModalOpen] = useState<boolean>(false);
   const [tradeType, setTradeType] = useState<PositionType>('LONG');
 
   const isFavorited = watchlist.includes(symbol);
-  const userPositions = positions.filter(p => p.symbol === symbol);
+  const userPositions = positions.filter((p) => p.symbol === symbol);
 
-  useEffect(() => {
-    let isMounted = true;
-    const loadData = async () => {
-      setIsLoading(true);
-      try {
-        const res = await fetchStockData(symbol, timeRange);
-        if (isMounted) {
-          setQuote(res.quote);
-          setChartData(res.chart);
-        }
-      } catch (err) {
-        console.error('Error fetching stock data', err);
-      } finally {
-        if (isMounted) setIsLoading(false);
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
+    setHasError(false);
+    try {
+      const res = await fetchStockData(symbol, timeRange);
+      if (res && res.quote) {
+        setQuote(res.quote);
+        setChartData(res.chart);
+        setHasError(false);
+      } else {
+        setQuote(null);
+        setChartData([]);
+        setHasError(true);
       }
-    };
-
-    loadData();
-    return () => {
-      isMounted = false;
-    };
+    } catch {
+      setHasError(true);
+    } finally {
+      setIsLoading(false);
+    }
   }, [symbol, timeRange]);
 
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
   const handleOpenTrade = (type: PositionType) => {
+    if (!quote) return;
     setTradeType(type);
     setTradeModalOpen(true);
   };
@@ -57,7 +61,7 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
   const isPositive = quote ? quote.change >= 0 : true;
 
   return (
-    <div className="pb-36 max-w-md mx-auto px-4 pt-2">
+    <div className="pb-36 max-w-md mx-auto px-4 pt-2 animate-fadeIn">
       {/* Top Bar with Back and Actions */}
       <div className="flex items-center justify-between mb-3">
         <button
@@ -95,25 +99,49 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
         </p>
       </div>
 
-      {/* Interactive Chart Section */}
-      <div className="bg-white dark:bg-ios-card-dark rounded-3xl p-4 border border-black/5 dark:border-white/5 shadow-ios">
-        {isLoading && chartData.length === 0 ? (
-          <div className="h-[280px] flex flex-col items-center justify-center text-zinc-400 gap-2">
-            <Loader2 className="w-7 h-7 animate-spin text-ios-blue" />
-            <span className="text-xs">Cargando gráfico interactivo...</span>
+      {/* Interactive Chart Section or Error */}
+      {hasError && !isLoading ? (
+        <div className="bg-white dark:bg-ios-card-dark rounded-3xl p-8 border border-black/5 dark:border-white/5 shadow-ios text-center space-y-3">
+          <div className="w-12 h-12 rounded-full bg-ios-orange/15 text-ios-orange flex items-center justify-center mx-auto">
+            <ShieldAlert className="w-6 h-6" />
           </div>
-        ) : (
-          <StockChart
-            data={chartData}
-            timeRange={timeRange}
-            onTimeRangeChange={(r) => setTimeRange(r)}
-            isPositive={isPositive}
-            height={230}
-            showTimeSelector={true}
-            positions={userPositions}
-          />
-        )}
-      </div>
+          <div>
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-50">
+              Mercado en directo no disponible
+            </h3>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 max-w-xs mx-auto leading-relaxed">
+              No se ha podido conectar con la cotización en tiempo real de {symbol}. Las operaciones están pausadas por seguridad.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={loadData}
+            className="py-2.5 px-4 rounded-2xl bg-ios-blue text-white text-xs font-bold shadow-md ios-active inline-flex items-center gap-1.5"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Reintentar Conexión</span>
+          </button>
+        </div>
+      ) : (
+        <div className="bg-white dark:bg-ios-card-dark rounded-3xl p-4 border border-black/5 dark:border-white/5 shadow-ios">
+          {isLoading && chartData.length === 0 ? (
+            <div className="h-[280px] flex flex-col items-center justify-center text-zinc-400 gap-2">
+              <Loader2 className="w-7 h-7 animate-spin text-ios-blue" />
+              <span className="text-xs font-medium">Conectando con cotizaciones oficiales...</span>
+            </div>
+          ) : (
+            <StockChart
+              data={chartData}
+              timeRange={timeRange}
+              onTimeRangeChange={(r) => setTimeRange(r)}
+              isPositive={isPositive}
+              height={230}
+              showTimeSelector={true}
+              positions={userPositions}
+            />
+          )}
+        </div>
+      )}
 
       {/* Active Positions in this asset */}
       {userPositions.length > 0 && (
@@ -226,71 +254,73 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
       )}
 
       {/* Financial Key Statistics Grid */}
-      <div className="mt-4 bg-white dark:bg-ios-card-dark rounded-3xl p-5 border border-black/5 dark:border-white/5 shadow-ios-sm">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-3">
-          Estadísticas Clave del Mercado
-        </h3>
+      {quote && (
+        <div className="mt-4 bg-white dark:bg-ios-card-dark rounded-3xl p-5 border border-black/5 dark:border-white/5 shadow-ios-sm">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-3">
+            Estadísticas Clave del Mercado
+          </h3>
 
-        <div className="grid grid-cols-2 gap-y-3.5 gap-x-4 text-xs">
-          <div className="flex items-center justify-between pb-2 border-b border-black/5 dark:border-white/5">
-            <span className="text-zinc-500 dark:text-zinc-400">Apertura</span>
-            <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
-              {quote?.open ? formatCurrency(quote.open) : '-'}
-            </span>
-          </div>
+          <div className="grid grid-cols-2 gap-y-3.5 gap-x-4 text-xs">
+            <div className="flex items-center justify-between pb-2 border-b border-black/5 dark:border-white/5">
+              <span className="text-zinc-500 dark:text-zinc-400">Apertura</span>
+              <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
+                {quote.open ? formatCurrency(quote.open) : '-'}
+              </span>
+            </div>
 
-          <div className="flex items-center justify-between pb-2 border-b border-black/5 dark:border-white/5">
-            <span className="text-zinc-500 dark:text-zinc-400">Cierre Previo</span>
-            <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
-              {quote?.prevClose ? formatCurrency(quote.prevClose) : '-'}
-            </span>
-          </div>
+            <div className="flex items-center justify-between pb-2 border-b border-black/5 dark:border-white/5">
+              <span className="text-zinc-500 dark:text-zinc-400">Cierre Previo</span>
+              <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
+                {quote.prevClose ? formatCurrency(quote.prevClose) : '-'}
+              </span>
+            </div>
 
-          <div className="flex items-center justify-between pb-2 border-b border-black/5 dark:border-white/5">
-            <span className="text-zinc-500 dark:text-zinc-400">Máx del Día</span>
-            <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
-              {quote?.high ? formatCurrency(quote.high) : '-'}
-            </span>
-          </div>
+            <div className="flex items-center justify-between pb-2 border-b border-black/5 dark:border-white/5">
+              <span className="text-zinc-500 dark:text-zinc-400">Máx del Día</span>
+              <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
+                {quote.high ? formatCurrency(quote.high) : '-'}
+              </span>
+            </div>
 
-          <div className="flex items-center justify-between pb-2 border-b border-black/5 dark:border-white/5">
-            <span className="text-zinc-500 dark:text-zinc-400">Mín del Día</span>
-            <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
-              {quote?.low ? formatCurrency(quote.low) : '-'}
-            </span>
-          </div>
+            <div className="flex items-center justify-between pb-2 border-b border-black/5 dark:border-white/5">
+              <span className="text-zinc-500 dark:text-zinc-400">Mín del Día</span>
+              <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
+                {quote.low ? formatCurrency(quote.low) : '-'}
+              </span>
+            </div>
 
-          <div className="flex items-center justify-between pb-2 border-b border-black/5 dark:border-white/5">
-            <span className="text-zinc-500 dark:text-zinc-400">Máx 52 Semanas</span>
-            <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
-              {quote?.week52High ? formatCurrency(quote.week52High) : '-'}
-            </span>
-          </div>
+            <div className="flex items-center justify-between pb-2 border-b border-black/5 dark:border-white/5">
+              <span className="text-zinc-500 dark:text-zinc-400">Máx 52 Semanas</span>
+              <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
+                {quote.week52High ? formatCurrency(quote.week52High) : '-'}
+              </span>
+            </div>
 
-          <div className="flex items-center justify-between pb-2 border-b border-black/5 dark:border-white/5">
-            <span className="text-zinc-500 dark:text-zinc-400">Mín 52 Semanas</span>
-            <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
-              {quote?.week52Low ? formatCurrency(quote.week52Low) : '-'}
-            </span>
-          </div>
+            <div className="flex items-center justify-between pb-2 border-b border-black/5 dark:border-white/5">
+              <span className="text-zinc-500 dark:text-zinc-400">Mín 52 Semanas</span>
+              <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
+                {quote.week52Low ? formatCurrency(quote.week52Low) : '-'}
+              </span>
+            </div>
 
-          <div className="flex items-center justify-between">
-            <span className="text-zinc-500 dark:text-zinc-400">Volumen</span>
-            <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
-              {quote?.volume || 'N/A'}
-            </span>
-          </div>
+            <div className="flex items-center justify-between">
+              <span className="text-zinc-500 dark:text-zinc-400">Volumen</span>
+              <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
+                {quote.volume || 'N/A'}
+              </span>
+            </div>
 
-          <div className="flex items-center justify-between">
-            <span className="text-zinc-500 dark:text-zinc-400">Cap. de Mercado</span>
-            <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
-              {quote?.marketCap || 'N/A'}
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="text-zinc-500 dark:text-zinc-400">Cap. de Mercado</span>
+              <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
+                {quote.marketCap || 'N/A'}
+              </span>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Fixed Clean Bottom Action Bar for Long and Short with Safe Area Insets */}
+      {/* Fixed Clean Bottom Action Bar for Long and Short */}
       {quote && (
         <div className="fixed bottom-0 left-0 right-0 z-30 pb-safe pt-2.5 px-4 ios-glass-bar border-t border-black/10 dark:border-white/15 shadow-ios-sheet">
           <div className="max-w-md mx-auto grid grid-cols-2 gap-3 mb-1.5">
