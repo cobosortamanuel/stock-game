@@ -128,6 +128,7 @@ function generateSyntheticChart(symbol: string, range: TimeRange, currentPrice: 
       break;
   }
 
+  const roundedNow = Math.floor(now / intervalMs) * intervalMs;
   let seed = symbol.split('').reduce((acc, char, idx) => acc + char.charCodeAt(0) * (idx + 2) * 23, 48291);
   const pseudoRand = () => {
     seed = (seed * 9301 + 49297) % 233280;
@@ -154,7 +155,7 @@ function generateSyntheticChart(symbol: string, range: TimeRange, currentPrice: 
   }
 
   for (let i = 0; i < count; i++) {
-    const timestamp = now - (count - 1 - i) * intervalMs;
+    const timestamp = roundedNow - (count - 1 - i) * intervalMs;
     const date = new Date(timestamp);
     const dateStr = (range === '1H' || range === '1D')
       ? date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
