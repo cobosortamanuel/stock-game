@@ -6,7 +6,8 @@ import App from './App'
 // Register Service Worker with dynamic base path for GitHub Pages / custom domains
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    const swUrl = `${import.meta.env.BASE_URL}sw.js`;
+    const base = (import.meta as any).env?.BASE_URL || './';
+    const swUrl = `${base}sw.js`;
     navigator.serviceWorker.register(swUrl).catch((err) => {
       console.log('SW registration note:', err);
     });
