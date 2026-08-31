@@ -1,8 +1,8 @@
 import { GameSaveData, GameSummary } from '../types/market';
 
-const REGISTRY_KEY = 'apex_games_registry_v5';
-const LOCAL_GAMES_PREFIX = 'apex_game_save_v5_';
-const CLOUD_SYNC_TOPIC = 'https://ntfy.sh/apex_trade_games_oz29_v5';
+const REGISTRY_KEY = 'apex_games_registry_v6';
+const LOCAL_GAMES_PREFIX = 'apex_game_save_v6_';
+const CLOUD_SYNC_TOPIC = 'https://ntfy.sh/apex_trade_games_oz29_v6';
 
 // Unique 6-character game code generator
 export function generateGameId(): string {
@@ -14,7 +14,7 @@ export function generateGameId(): string {
   return id;
 }
 
-// Fetch all games (Local Storage + Cloud Realtime Topic)
+// Fetch all games (Local first + Background Cloud Sync)
 export async function fetchAllGames(): Promise<GameSummary[]> {
   let localGames: GameSummary[] = [];
 
@@ -27,12 +27,9 @@ export async function fetchAllGames(): Promise<GameSummary[]> {
     localGames = [];
   }
 
-  // Fetch Cloud sync items with full CORS support
+  // Safely poll cloud without blocking or aborting
   try {
-    const response = await fetch(`${CLOUD_SYNC_TOPIC}/json?poll=1&since=all`, {
-      signal: AbortSignal.timeout(3000),
-    });
-
+    const response = await fetch(`${CLOUD_SYNC_TOPIC}/json?poll=1&since=all`);
     if (response.ok) {
       const rawText = await response.text();
       const lines = rawText.trim().split('\n').filter(Boolean);
@@ -51,7 +48,6 @@ export async function fetchAllGames(): Promise<GameSummary[]> {
                 const existing = cloudGamesMap.get(parsed.id);
                 if (!existing || parsed.updatedAt > existing.updatedAt) {
                   cloudGamesMap.set(parsed.id, parsed);
-                  // Cache full game locally
                   localStorage.setItem(`${LOCAL_GAMES_PREFIX}${parsed.id}`, JSON.stringify(parsed));
                 }
               }
@@ -60,7 +56,7 @@ export async function fetchAllGames(): Promise<GameSummary[]> {
         } catch {}
       });
 
-      // Merge unique games by ID
+      // Merge local with cloud
       const map = new Map<string, GameSummary>();
       localGames.forEach((g) => map.set(g.id, g));
 
@@ -88,15 +84,15 @@ export async function fetchAllGames(): Promise<GameSummary[]> {
       localStorage.setItem(REGISTRY_KEY, JSON.stringify(merged));
       return merged;
     }
-  } catch (err) {
-    console.warn('Cloud realtime sync note:', err);
+  } catch {
+    // Network offline or failed - smoothly return local data
   }
 
   return localGames.sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-// Save or update game in Cloud and Local (Instant 0ms + Cloud Broadcast)
-export async function syncGameToCloudAndLocal(game: GameSaveData): Promise<boolean> {
+// Synchronous immediate local save + background cloud broadcast
+export function syncGameToCloudAndLocal(game: GameSaveData): boolean {
   const summary: GameSummary = {
     id: game.id,
     name: game.name,
@@ -116,11 +112,11 @@ export async function syncGameToCloudAndLocal(game: GameSaveData): Promise<boole
     updatedAt: summary.updatedAt,
   };
 
-  // 1. Instant local persistence
+  // 1. Instant local persistence (Synchronous & Bulletproof)
   try {
     localStorage.setItem(`${LOCAL_GAMES_PREFIX}${game.id}`, JSON.stringify(fullData));
   } catch (e) {
-    console.warn('LocalStorage save warning:', e);
+    console.warn('LocalStorage save note:', e);
   }
 
   // 2. Update local registry
@@ -135,41 +131,39 @@ export async function syncGameToCloudAndLocal(game: GameSaveData): Promise<boole
     ...localRegistry.filter((g) => g.id !== game.id),
   ].sort((a, b) => b.updatedAt - a.updatedAt);
 
-  localStorage.setItem(REGISTRY_KEY, JSON.stringify(updatedRegistry));
+  try {
+    localStorage.setItem(REGISTRY_KEY, JSON.stringify(updatedRegistry));
+  } catch {}
 
-  // 3. Broadcast to Real-Time Cloud Topic (Cross-Device PC & Mobile Sync)
+  // 3. Background Cloud Broadcast
   try {
     fetch(CLOUD_SYNC_TOPIC, {
       method: 'POST',
       headers: {
         'Title': `Apex Game ${game.name}`,
-        'Tags': 'chart_with_upwards_trend',
+        'Tags': 'game',
       },
       body: JSON.stringify(fullData),
     }).catch(() => {});
-  } catch (err) {
-    console.warn('Cloud sync error note:', err);
-  }
+  } catch {}
 
   return true;
 }
 
-// Rename a game across Cloud & Local
+// Rename a game
 export async function renameGameById(gameId: string, newName: string): Promise<boolean> {
   const cleanId = gameId.trim().toUpperCase();
   const cleanName = newName.trim();
   if (!cleanName) return false;
 
-  // Load existing
   const existing = await loadGameData(cleanId);
   if (existing) {
     existing.name = cleanName;
     existing.updatedAt = Date.now();
-    await syncGameToCloudAndLocal(existing);
+    syncGameToCloudAndLocal(existing);
     return true;
   }
 
-  // Update registry
   let localRegistry: GameSummary[] = [];
   try {
     const reg = localStorage.getItem(REGISTRY_KEY);
@@ -179,7 +173,9 @@ export async function renameGameById(gameId: string, newName: string): Promise<b
   const updated = localRegistry.map((g) =>
     g.id === cleanId ? { ...g, name: cleanName, updatedAt: Date.now() } : g
   );
-  localStorage.setItem(REGISTRY_KEY, JSON.stringify(updated));
+  try {
+    localStorage.setItem(REGISTRY_KEY, JSON.stringify(updated));
+  } catch {}
 
   return true;
 }
@@ -188,7 +184,7 @@ export async function renameGameById(gameId: string, newName: string): Promise<b
 export async function loadGameData(gameId: string): Promise<GameSaveData | null> {
   const cleanId = gameId.trim().toUpperCase();
 
-  // Try local first (instant)
+  // Try local first (instant 0ms)
   try {
     const local = localStorage.getItem(`${LOCAL_GAMES_PREFIX}${cleanId}`);
     if (local) {
@@ -199,9 +195,7 @@ export async function loadGameData(gameId: string): Promise<GameSaveData | null>
 
   // Try loading from Cloud
   try {
-    const response = await fetch(`${CLOUD_SYNC_TOPIC}/json?poll=1&since=all`, {
-      signal: AbortSignal.timeout(3000),
-    });
+    const response = await fetch(`${CLOUD_SYNC_TOPIC}/json?poll=1&since=all`);
     if (response.ok) {
       const rawText = await response.text();
       const lines = rawText.trim().split('\n').filter(Boolean);
@@ -231,22 +225,19 @@ export async function loadGameData(gameId: string): Promise<GameSaveData | null>
   return null;
 }
 
-// Delete a game from Cloud and Local
+// Delete a game
 export async function deleteGameById(gameId: string): Promise<boolean> {
   const cleanId = gameId.trim().toUpperCase();
 
-  localStorage.removeItem(`${LOCAL_GAMES_PREFIX}${cleanId}`);
-
-  let registry: GameSummary[] = [];
   try {
+    localStorage.removeItem(`${LOCAL_GAMES_PREFIX}${cleanId}`);
+    let registry: GameSummary[] = [];
     const reg = localStorage.getItem(REGISTRY_KEY);
     if (reg) registry = JSON.parse(reg);
+    const updatedRegistry = registry.filter((g) => g.id !== cleanId);
+    localStorage.setItem(REGISTRY_KEY, JSON.stringify(updatedRegistry));
   } catch {}
 
-  const updatedRegistry = registry.filter((g) => g.id !== cleanId);
-  localStorage.setItem(REGISTRY_KEY, JSON.stringify(updatedRegistry));
-
-  // Broadcast deletion to cloud
   try {
     fetch(CLOUD_SYNC_TOPIC, {
       method: 'POST',
@@ -255,32 +246,4 @@ export async function deleteGameById(gameId: string): Promise<boolean> {
   } catch {}
 
   return true;
-}
-
-// Subscribe to real-time SSE updates from other devices (PC <-> Mobile)
-export function subscribeToRealtimeCloud(onUpdate: (game: GameSaveData) => void): () => void {
-  if (typeof EventSource === 'undefined') return () => {};
-
-  try {
-    const eventSource = new EventSource(`${CLOUD_SYNC_TOPIC}/sse`);
-
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.event === 'message' && data.message) {
-          const gamePayload = JSON.parse(data.message);
-          if (gamePayload && gamePayload.id && !gamePayload._isDeleted) {
-            localStorage.setItem(`${LOCAL_GAMES_PREFIX}${gamePayload.id}`, JSON.stringify(gamePayload));
-            onUpdate(gamePayload);
-          }
-        }
-      } catch {}
-    };
-
-    return () => {
-      eventSource.close();
-    };
-  } catch {
-    return () => {};
-  }
 }
