@@ -308,62 +308,15 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, [watchlist, positions, liveQuotes]);
 
-  // Background price ticking
+  // Periodic real market data sync
   useEffect(() => {
     refreshMarketData();
     const interval = setInterval(() => {
-      setLiveQuotes((prevQuotes) => {
-        const nextQuotes = { ...prevQuotes };
-        Object.keys(nextQuotes).forEach((sym) => {
-          const tickDelta = (Math.random() - 0.495) * 0.003 * nextQuotes[sym].price;
-          const newPrice = Math.max(0.01, Number((nextQuotes[sym].price + tickDelta).toFixed(2)));
-          const change = Number((newPrice - nextQuotes[sym].prevClose).toFixed(2));
-          const changePercent = nextQuotes[sym].prevClose > 0 ? Number(((change / nextQuotes[sym].prevClose) * 100).toFixed(2)) : 0;
-          nextQuotes[sym] = {
-            ...nextQuotes[sym],
-            price: newPrice,
-            change,
-            changePercent,
-          };
-        });
-
-        // Update positions atomically with the fresh quote
-        setPositions((prevPositions) =>
-          prevPositions.map((pos) => {
-            const currentQuote = nextQuotes[pos.symbol];
-            if (!currentQuote) return pos;
-            const curPrice = currentQuote.price;
-
-            let pnl = 0;
-            let pnlPct = 0;
-            let curVal = pos.investedAmount;
-
-            if (pos.type === 'LONG') {
-              pnl = (curPrice - pos.entryPrice) * pos.shares;
-              pnlPct = pos.entryPrice > 0 ? ((curPrice - pos.entryPrice) / pos.entryPrice) * 100 : 0;
-              curVal = pos.shares * curPrice;
-            } else {
-              pnl = (pos.entryPrice - curPrice) * pos.shares;
-              pnlPct = pos.entryPrice > 0 ? ((pos.entryPrice - curPrice) / pos.entryPrice) * 100 : 0;
-              curVal = pos.investedAmount + pnl;
-            }
-
-            return {
-              ...pos,
-              currentPrice: curPrice,
-              currentValue: Math.max(0, curVal),
-              unrealizedPnL: pnl,
-              unrealizedPnLPercent: pnlPct,
-            };
-          })
-        );
-
-        return nextQuotes;
-      });
-    }, 4000);
+      refreshMarketData();
+    }, 20000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [refreshMarketData]);
 
   // Portfolio Totals
   const cashInvested = useMemo(() => {
