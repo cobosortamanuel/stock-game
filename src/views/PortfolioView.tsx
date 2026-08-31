@@ -28,7 +28,7 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
   const activeTimeframeReturn = portfolioTimeframeReturns[selectedTimeframe];
   const isOverallPositive = activeTimeframeReturn.amount >= 0;
 
-  const timeRanges: TimeRange[] = ['1D', '1W', '1M', '1Y', '5Y', 'ALL'];
+  const timeRanges: TimeRange[] = ['1H', '1D', '1W', '1M', '1Y', '5Y', 'ALL'];
 
   const longPositions = positions.filter(p => p.type === 'LONG');
   const shortPositions = positions.filter(p => p.type === 'SHORT');
@@ -74,7 +74,7 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
         </div>
 
         {/* Portfolio Timeframe Switcher */}
-        <div className="mt-4 grid grid-cols-6 gap-1 bg-zinc-200/60 dark:bg-zinc-800/80 p-1 rounded-xl">
+        <div className="mt-4 grid grid-cols-7 gap-1 bg-zinc-200/60 dark:bg-zinc-800/80 p-1 rounded-xl">
           {timeRanges.map((tf) => (
             <button
               key={tf}

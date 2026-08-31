@@ -1,4 +1,4 @@
-export type TimeRange = '1D' | '1W' | '1M' | '1Y' | '5Y' | 'ALL';
+export type TimeRange = '1H' | '1D' | '1W' | '1M' | '1Y' | '5Y' | 'ALL';
 
 export type PositionType = 'LONG' | 'SHORT';
 
@@ -33,6 +33,7 @@ export interface StockQuote {
   sector?: string;
   description?: string;
   historicalChanges?: {
+    '1H'?: number;
     '1D': number;
     '1W': number;
     '1M': number;
@@ -56,6 +57,7 @@ export interface Position {
   unrealizedPnLPercent: number; // Ganancia/Pérdida en %
   openedAt: number;
   timeframePnL?: {
+    '1H'?: number;
     '1D': number;
     '1W': number;
     '1M': number;

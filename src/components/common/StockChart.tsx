@@ -105,7 +105,7 @@ export const StockChart: React.FC<StockChartProps> = ({
   const trendColor = isTrendUp ? '#34C759' : '#FF3B30';
   const trendGradientId = `grad_${isTrendUp ? 'green' : 'red'}`;
 
-  const timeRanges: TimeRange[] = ['1D', '1W', '1M', '1Y', '5Y', 'ALL'];
+  const timeRanges: TimeRange[] = ['1H', '1D', '1W', '1M', '1Y', '5Y', 'ALL'];
 
   return (
     <div className="w-full flex flex-col select-none">
@@ -207,7 +207,7 @@ export const StockChart: React.FC<StockChartProps> = ({
 
       {/* iOS Timeframe Segmented Switcher */}
       {showTimeSelector && onTimeRangeChange && (
-        <div className="mt-3 grid grid-cols-6 gap-1 bg-zinc-100 dark:bg-zinc-900/90 p-1 rounded-xl border border-black/5 dark:border-white/5">
+        <div className="mt-3 grid grid-cols-7 gap-1 bg-zinc-100 dark:bg-zinc-900/90 p-1 rounded-xl border border-black/5 dark:border-white/5">
           {timeRanges.map((range) => {
             const isSelected = range === timeRange;
             return (

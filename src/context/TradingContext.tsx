@@ -38,6 +38,7 @@ interface TradingContextType {
   
   // Timeframe portfolio performance
   portfolioTimeframeReturns: {
+    '1H': { amount: number; percent: number };
     '1D': { amount: number; percent: number };
     '1W': { amount: number; percent: number };
     '1M': { amount: number; percent: number };
@@ -305,52 +306,55 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     refreshMarketData();
     const interval = setInterval(() => {
-      setLiveQuotes((prev) => {
-        const next = { ...prev };
-        Object.keys(next).forEach((sym) => {
-          const tickDelta = (Math.random() - 0.495) * 0.003 * next[sym].price;
-          const newPrice = Math.max(0.01, Number((next[sym].price + tickDelta).toFixed(2)));
-          const change = Number((newPrice - next[sym].prevClose).toFixed(2));
-          const changePercent = next[sym].prevClose > 0 ? Number(((change / next[sym].prevClose) * 100).toFixed(2)) : 0;
-          next[sym] = {
-            ...next[sym],
+      setLiveQuotes((prevQuotes) => {
+        const nextQuotes = { ...prevQuotes };
+        Object.keys(nextQuotes).forEach((sym) => {
+          const tickDelta = (Math.random() - 0.495) * 0.003 * nextQuotes[sym].price;
+          const newPrice = Math.max(0.01, Number((nextQuotes[sym].price + tickDelta).toFixed(2)));
+          const change = Number((newPrice - nextQuotes[sym].prevClose).toFixed(2));
+          const changePercent = nextQuotes[sym].prevClose > 0 ? Number(((change / nextQuotes[sym].prevClose) * 100).toFixed(2)) : 0;
+          nextQuotes[sym] = {
+            ...nextQuotes[sym],
             price: newPrice,
             change,
             changePercent,
           };
         });
-        return next;
+
+        // Update positions atomically with the fresh quote
+        setPositions((prevPositions) =>
+          prevPositions.map((pos) => {
+            const currentQuote = nextQuotes[pos.symbol];
+            if (!currentQuote) return pos;
+            const curPrice = currentQuote.price;
+
+            let pnl = 0;
+            let pnlPct = 0;
+            let curVal = pos.investedAmount;
+
+            if (pos.type === 'LONG') {
+              pnl = (curPrice - pos.entryPrice) * pos.shares;
+              pnlPct = pos.entryPrice > 0 ? ((curPrice - pos.entryPrice) / pos.entryPrice) * 100 : 0;
+              curVal = pos.shares * curPrice;
+            } else {
+              // SHORT: Win when price drops (entryPrice > curPrice)
+              pnl = (pos.entryPrice - curPrice) * pos.shares;
+              pnlPct = pos.entryPrice > 0 ? ((pos.entryPrice - curPrice) / pos.entryPrice) * 100 : 0;
+              curVal = pos.investedAmount + pnl;
+            }
+
+            return {
+              ...pos,
+              currentPrice: curPrice,
+              currentValue: Math.max(0, curVal),
+              unrealizedPnL: pnl,
+              unrealizedPnLPercent: pnlPct,
+            };
+          })
+        );
+
+        return nextQuotes;
       });
-
-      setPositions((prev) =>
-        prev.map((pos) => {
-          const currentQuote = liveQuotes[pos.symbol];
-          if (!currentQuote) return pos;
-          const curPrice = currentQuote.price;
-
-          let pnl = 0;
-          let pnlPct = 0;
-          let curVal = pos.investedAmount;
-
-          if (pos.type === 'LONG') {
-            pnl = (curPrice - pos.entryPrice) * pos.shares;
-            pnlPct = pos.entryPrice > 0 ? ((curPrice - pos.entryPrice) / pos.entryPrice) * 100 : 0;
-            curVal = pos.shares * curPrice;
-          } else {
-            pnl = (pos.entryPrice - curPrice) * pos.shares;
-            pnlPct = pos.entryPrice > 0 ? ((pos.entryPrice - curPrice) / pos.entryPrice) * 100 : 0;
-            curVal = pos.investedAmount + pnl;
-          }
-
-          return {
-            ...pos,
-            currentPrice: curPrice,
-            currentValue: Math.max(0, curVal),
-            unrealizedPnL: pnl,
-            unrealizedPnLPercent: pnlPct,
-          };
-        })
-      );
     }, 4000);
 
     return () => clearInterval(interval);
@@ -398,6 +402,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const allPct = initialCash > 0 ? (allPnl / initialCash) * 100 : 0;
 
     return {
+      '1H': { amount: dailyPnL * 0.35, percent: dailyPnLPercent * 0.35 },
       '1D': { amount: dailyPnL, percent: dailyPnLPercent },
       '1W': { amount: totalPnL * 0.45, percent: totalPnLPercent * 0.45 },
       '1M': { amount: totalPnL * 0.85, percent: totalPnLPercent * 0.85 },

@@ -150,7 +150,7 @@ export const PositionCard: React.FC<PositionCardProps> = ({
       {/* Timeframe Performance Selector Row */}
       <div className="mt-3 pt-2.5 border-t border-black/5 dark:border-white/5 flex items-center justify-between">
         <div className="flex items-center gap-1">
-          {(['1D', '1W', '1M', '1Y', 'ALL'] as TimeRange[]).map((tf) => (
+          {(['1H', '1D', '1W', '1M', '1Y', 'ALL'] as TimeRange[]).map((tf) => (
             <button
               key={tf}
               type="button"

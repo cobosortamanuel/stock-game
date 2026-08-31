@@ -53,6 +53,8 @@ export const formatPercent = (value: number, includeSign: boolean = true): strin
 
 function getTimeRangeParams(range: TimeRange): { range: string; interval: string } {
   switch (range) {
+    case '1H':
+      return { range: '1d', interval: '2m' };
     case '1D':
       return { range: '1d', interval: '5m' };
     case '1W':
@@ -78,6 +80,11 @@ function generateSyntheticChart(symbol: string, range: TimeRange, currentPrice: 
   let volatility = 0.008;
 
   switch (range) {
+    case '1H':
+      count = 60;
+      intervalMs = 60 * 1000;
+      volatility = 0.002;
+      break;
     case '1D':
       count = 78;
       intervalMs = 5 * 60 * 1000;
@@ -122,7 +129,7 @@ function generateSyntheticChart(symbol: string, range: TimeRange, currentPrice: 
   for (let i = 0; i < count; i++) {
     const timestamp = now - (count - 1 - i) * intervalMs;
     const date = new Date(timestamp);
-    const dateStr = range === '1D' 
+    const dateStr = (range === '1H' || range === '1D')
       ? date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
       : date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric', year: range === '5Y' || range === 'ALL' ? '2-digit' : undefined });
     
@@ -196,7 +203,7 @@ export async function fetchStockData(symbol: string, range: TimeRange = '1D'): P
             if (rawClose !== null && rawClose !== undefined && !isNaN(rawClose)) {
               const ts = timestamps[i] * 1000;
               const date = new Date(ts);
-              const dateStr = range === '1D'
+              const dateStr = (range === '1H' || range === '1D')
                 ? date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
                 : date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric', year: range === '5Y' || range === 'ALL' ? '2-digit' : undefined });
 
@@ -230,6 +237,7 @@ export async function fetchStockData(symbol: string, range: TimeRange = '1D'): P
             currency: meta.currency || 'USD',
             exchange: meta.exchangeName || 'NASDAQ',
             historicalChanges: {
+              '1H': Number((changePercent * 0.25).toFixed(2)),
               '1D': Number(changePercent.toFixed(2)),
               '1W': Number(((Math.random() * 8) - 3.5).toFixed(2)),
               '1M': Number(((Math.random() * 16) - 6.5).toFixed(2)),
@@ -274,6 +282,7 @@ export async function fetchStockData(symbol: string, range: TimeRange = '1D'): P
     week52High: Number((basePrice * 1.35).toFixed(2)),
     week52Low: Number((basePrice * 0.75).toFixed(2)),
     historicalChanges: {
+      '1H': Number((simulatedChange * 0.25).toFixed(2)),
       '1D': Number(simulatedChange.toFixed(2)),
       '1W': Number(((Math.random() * 8) - 3.2).toFixed(2)),
       '1M': Number(((Math.random() * 15) - 5).toFixed(2)),
