@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Star, TrendingUp, TrendingDown, Layers, Loader2 } from 'lucide-react';
+import { ArrowLeft, Star, TrendingUp, TrendingDown, Layers, Loader2, Clock } from 'lucide-react';
 import { StockQuote, ChartPoint, TimeRange, PositionType } from '../types/market';
 import { fetchStockData, formatCurrency, formatPercent } from '../services/marketApi';
 import { StockChart } from '../components/common/StockChart';
@@ -15,7 +15,7 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
   symbol,
   onBack,
 }) => {
-  const { watchlist, toggleWatchlist, positions } = useTrading();
+  const { watchlist, toggleWatchlist, positions, closePosition } = useTrading();
   const [timeRange, setTimeRange] = useState<TimeRange>('1D');
   const [quote, setQuote] = useState<StockQuote | null>(null);
   const [chartData, setChartData] = useState<ChartPoint[]>([]);
@@ -115,31 +115,113 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
         )}
       </div>
 
-      {/* Active Position in this asset if any */}
+      {/* Active Positions in this asset */}
       {userPositions.length > 0 && (
-        <div className="mt-4 p-4 bg-zinc-900 dark:bg-zinc-800 text-white rounded-2xl shadow-md space-y-2">
-          <div className="flex items-center justify-between text-xs font-semibold">
-            <div className="flex items-center gap-1.5">
-              <Layers className="w-4 h-4 text-ios-blue" />
-              <span>Tienes dinero apostado en {symbol}</span>
-            </div>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/20">
-              {userPositions.length} posición(es)
+        <div className="mt-4 space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">
+              Tus Apuestas en {symbol} ({userPositions.length})
             </span>
           </div>
-          {userPositions.map((p) => (
-            <div key={p.id} className="pt-2 border-t border-white/10 flex items-center justify-between text-xs">
-              <div>
-                <span className={`font-bold ${p.type === 'LONG' ? 'text-ios-green' : 'text-ios-orange'}`}>
-                  {p.type === 'LONG' ? 'Largo' : 'Corto'}:
-                </span>{' '}
-                <span className="font-mono text-zinc-300">{formatCurrency(p.investedAmount)} apostados</span>
+
+          {userPositions.map((pos) => {
+            const isLong = pos.type === 'LONG';
+            const isProfitable = pos.unrealizedPnL >= 0;
+            const openedDate = new Date(pos.openedAt);
+            const dateFormatted = `${openedDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} · ${openedDate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
+
+            return (
+              <div
+                key={pos.id}
+                className="p-4 bg-white dark:bg-ios-card-dark rounded-3xl border border-black/5 dark:border-white/5 shadow-ios-sm space-y-3"
+              >
+                {/* Header: Type Badge, Opened Time, PnL */}
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`px-2.5 py-1 rounded-xl text-xs font-bold font-mono tracking-wide shadow-sm flex items-center gap-1 ${
+                        isLong
+                          ? 'bg-ios-green/15 text-ios-green border border-ios-green/30'
+                          : 'bg-ios-orange/15 text-ios-orange border border-ios-orange/30'
+                      }`}
+                    >
+                      {isLong ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                      {isLong ? 'LARGO' : 'CORTO'}
+                    </span>
+                    <span className="text-[11px] text-zinc-500 dark:text-zinc-400 font-medium flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-zinc-400" />
+                      {dateFormatted}
+                    </span>
+                  </div>
+
+                  <div className="text-right">
+                    <div
+                      className={`text-sm font-bold font-mono ${
+                        isProfitable ? 'text-ios-green' : 'text-ios-red'
+                      }`}
+                    >
+                      {isProfitable ? '+' : ''}{formatCurrency(pos.unrealizedPnL)}
+                    </div>
+                    <div
+                      className={`text-[11px] font-semibold font-mono ${
+                        isProfitable ? 'text-ios-green' : 'text-ios-red'
+                      }`}
+                    >
+                      {isProfitable ? '+' : ''}{formatPercent(pos.unrealizedPnLPercent)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4-Grid of Key Details */}
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-black/5 dark:border-white/5 text-xs">
+                  <div className="p-2.5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50">
+                    <span className="text-[10px] text-zinc-400 uppercase font-medium block">
+                      Precio de Entrada
+                    </span>
+                    <span className="font-mono font-bold text-zinc-900 dark:text-zinc-100">
+                      {formatCurrency(pos.entryPrice)}
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50">
+                    <span className="text-[10px] text-zinc-400 uppercase font-medium block">
+                      Precio Actual
+                    </span>
+                    <span className="font-mono font-bold text-zinc-900 dark:text-zinc-100">
+                      {formatCurrency(pos.currentPrice)}
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50">
+                    <span className="text-[10px] text-zinc-400 uppercase font-medium block">
+                      Dinero Apostado
+                    </span>
+                    <span className="font-mono font-bold text-zinc-900 dark:text-zinc-100">
+                      {formatCurrency(pos.investedAmount)}
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50">
+                    <span className="text-[10px] text-zinc-400 uppercase font-medium block">
+                      Valor Actual ({pos.shares.toFixed(3)} acc)
+                    </span>
+                    <span className="font-mono font-bold text-zinc-900 dark:text-zinc-100">
+                      {formatCurrency(pos.currentValue)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Close Position Action Button */}
+                <button
+                  type="button"
+                  onClick={() => closePosition(pos.id)}
+                  className="w-full py-2.5 rounded-2xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-bold transition-all ios-active flex items-center justify-center gap-1.5"
+                >
+                  <span>Cerrar esta Posición (Cobrar {formatCurrency(pos.currentValue)})</span>
+                </button>
               </div>
-              <div className="font-mono font-semibold">
-                {p.unrealizedPnL >= 0 ? '+' : ''}{formatCurrency(p.unrealizedPnL)} ({formatPercent(p.unrealizedPnLPercent)})
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
