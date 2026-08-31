@@ -1,6 +1,9 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { GameSaveData, GameSummary } from '../types/market';
 
+const DEFAULT_SUPABASE_URL = 'https://vvxfewktdsltzsxfumio.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_RXWhW8Lu_vIehqKQJAPsQw_GkvczmaZ';
+
 const STORAGE_KEYS = {
   SUPABASE_URL: 'apex_supabase_url_v1',
   SUPABASE_ANON_KEY: 'apex_supabase_anon_key_v1',
@@ -8,15 +11,14 @@ const STORAGE_KEYS = {
 
 let supabaseClient: SupabaseClient | null = null;
 
-export function getSupabaseCredentials(): { url: string; key: string } | null {
-  const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL;
-  const envKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY;
-
-  if (envUrl && envKey) {
-    return { url: envUrl, key: envKey };
-  }
-
+export function getSupabaseCredentials(): { url: string; key: string } {
   try {
+    const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL;
+    const envKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY;
+    if (envUrl && envKey) {
+      return { url: envUrl, key: envKey };
+    }
+
     const savedUrl = localStorage.getItem(STORAGE_KEYS.SUPABASE_URL);
     const savedKey = localStorage.getItem(STORAGE_KEYS.SUPABASE_ANON_KEY);
     if (savedUrl && savedKey) {
@@ -24,7 +26,10 @@ export function getSupabaseCredentials(): { url: string; key: string } | null {
     }
   } catch {}
 
-  return null;
+  return {
+    url: DEFAULT_SUPABASE_URL,
+    key: DEFAULT_SUPABASE_ANON_KEY,
+  };
 }
 
 export function saveSupabaseCredentials(url: string, key: string): boolean {
@@ -42,36 +47,20 @@ export function saveSupabaseCredentials(url: string, key: string): boolean {
   }
 }
 
-export function clearSupabaseCredentials() {
-  try {
-    localStorage.removeItem(STORAGE_KEYS.SUPABASE_URL);
-    localStorage.removeItem(STORAGE_KEYS.SUPABASE_ANON_KEY);
-    supabaseClient = null;
-  } catch {}
-}
-
-export function getSupabase(): SupabaseClient | null {
+export function getSupabase(): SupabaseClient {
   if (supabaseClient) return supabaseClient;
   const creds = getSupabaseCredentials();
-  if (creds && creds.url && creds.key) {
-    try {
-      supabaseClient = createClient(creds.url, creds.key);
-      return supabaseClient;
-    } catch {
-      return null;
-    }
-  }
-  return null;
+  supabaseClient = createClient(creds.url, creds.key);
+  return supabaseClient;
 }
 
 export const isCloudConnected = (): boolean => {
-  return getSupabase() !== null;
+  return true; // Always connected to Supabase
 };
 
 // Fetch all games from Supabase
 export async function fetchGamesFromSupabase(): Promise<GameSummary[] | null> {
   const supabase = getSupabase();
-  if (!supabase) return null;
 
   try {
     const { data, error } = await supabase
@@ -80,7 +69,7 @@ export async function fetchGamesFromSupabase(): Promise<GameSummary[] | null> {
       .order('updated_at', { ascending: false });
 
     if (error || !data) {
-      console.warn('Supabase fetch error:', error?.message);
+      console.warn('Supabase fetch note:', error?.message);
       return null;
     }
 
@@ -106,7 +95,6 @@ export async function fetchGamesFromSupabase(): Promise<GameSummary[] | null> {
 // Fetch single game data from Supabase
 export async function fetchGameDataFromSupabase(gameId: string): Promise<GameSaveData | null> {
   const supabase = getSupabase();
-  if (!supabase) return null;
 
   try {
     const { data, error } = await supabase
@@ -141,7 +129,6 @@ export async function fetchGameDataFromSupabase(gameId: string): Promise<GameSav
 // Upsert game data into Supabase
 export async function saveGameToSupabase(game: GameSaveData): Promise<boolean> {
   const supabase = getSupabase();
-  if (!supabase) return false;
 
   try {
     const payload = {
@@ -166,7 +153,7 @@ export async function saveGameToSupabase(game: GameSaveData): Promise<boolean> {
       .upsert(payload, { onConflict: 'id' });
 
     if (error) {
-      console.warn('Supabase upsert note:', error.message);
+      console.warn('Supabase save note:', error.message);
       return false;
     }
     return true;
@@ -178,7 +165,6 @@ export async function saveGameToSupabase(game: GameSaveData): Promise<boolean> {
 // Delete game from Supabase
 export async function deleteGameFromSupabase(gameId: string): Promise<boolean> {
   const supabase = getSupabase();
-  if (!supabase) return false;
 
   try {
     const { error } = await supabase
@@ -192,10 +178,9 @@ export async function deleteGameFromSupabase(gameId: string): Promise<boolean> {
   }
 }
 
-// Subscribe to real-time database changes from other devices (PC <-> Mobile)
+// Subscribe to real-time database changes across all devices
 export function subscribeToSupabaseRealtime(onSync: () => void): () => void {
   const supabase = getSupabase();
-  if (!supabase) return () => {};
 
   try {
     const channel = supabase

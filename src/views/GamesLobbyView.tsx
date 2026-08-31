@@ -1,40 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { PlusCircle, Trash2, ChevronRight, X, Loader2, RefreshCw, Pencil, Check, FolderKanban, Cloud, Link2, Copy, CheckCircle2 } from 'lucide-react';
+import { PlusCircle, Trash2, ChevronRight, X, Loader2, RefreshCw, Pencil, Check, FolderKanban, Cloud } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { formatCurrency, formatPercent } from '../services/marketApi';
-import {
-  isCloudConnected,
-  getSupabaseCredentials,
-  saveSupabaseCredentials,
-  clearSupabaseCredentials,
-  subscribeToSupabaseRealtime,
-} from '../services/supabaseService';
+import { subscribeToSupabaseRealtime } from '../services/supabaseService';
 
 interface GamesLobbyViewProps {
   onClose: () => void;
 }
-
-const SUPABASE_SQL_SETUP = `-- Ejecuta este script en el SQL Editor de tu proyecto Supabase:
-create table if not exists games (
-  id text primary key,
-  name text not null,
-  initial_cash numeric not null default 100000,
-  cash_available numeric not null default 100000,
-  cash_invested numeric not null default 0,
-  total_net_worth numeric not null default 100000,
-  total_pnl numeric not null default 0,
-  total_pnl_percent numeric not null default 0,
-  positions_count integer not null default 0,
-  positions jsonb default '[]'::jsonb,
-  trade_history jsonb default '[]'::jsonb,
-  watchlist jsonb default '[]'::jsonb,
-  created_at bigint not null,
-  updated_at bigint not null
-);
-
-alter table games enable row level security;
-create policy "Public Access" on games for all using (true) with check (true);
-alter publication supabase_realtime add table games;`;
 
 export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
   const {
@@ -58,31 +30,14 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
   const [editingGameId, setEditingGameId] = useState<string | null>(null);
   const [editNameValue, setEditNameValue] = useState<string>('');
 
-  // Supabase Cloud Config Modal State
-  const [isCloudModalOpen, setIsCloudModalOpen] = useState<boolean>(false);
-  const [supabaseUrl, setSupabaseUrl] = useState<string>('');
-  const [supabaseKey, setSupabaseKey] = useState<string>('');
-  const [cloudConnected, setCloudConnected] = useState<boolean>(() => isCloudConnected());
-  const [copiedSql, setCopiedSql] = useState<boolean>(false);
-
+  // Realtime subscription
   useEffect(() => {
-    const creds = getSupabaseCredentials();
-    if (creds) {
-      setSupabaseUrl(creds.url);
-      setSupabaseKey(creds.key);
-      setCloudConnected(true);
-    }
-  }, []);
-
-  // Realtime subscription if connected
-  useEffect(() => {
-    if (cloudConnected) {
-      const unsub = subscribeToSupabaseRealtime(() => {
-        fetchGamesList();
-      });
-      return () => unsub();
-    }
-  }, [cloudConnected, fetchGamesList]);
+    fetchGamesList();
+    const unsub = subscribeToSupabaseRealtime(() => {
+      fetchGamesList();
+    });
+    return () => unsub();
+  }, [fetchGamesList]);
 
   const capitalOptions = [10000, 50000, 100000, 500000, 1000000];
 
@@ -117,33 +72,6 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
     setGameToDelete(null);
   };
 
-  const handleSaveCloudConfig = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!supabaseUrl.trim() || !supabaseKey.trim()) return;
-
-    const ok = saveSupabaseCredentials(supabaseUrl.trim(), supabaseKey.trim());
-    if (ok) {
-      setCloudConnected(true);
-      setIsCloudModalOpen(false);
-      await fetchGamesList();
-    }
-  };
-
-  const handleDisconnectCloud = () => {
-    clearSupabaseCredentials();
-    setCloudConnected(false);
-    setSupabaseUrl('');
-    setSupabaseKey('');
-    setIsCloudModalOpen(false);
-    fetchGamesList();
-  };
-
-  const copySql = () => {
-    navigator.clipboard.writeText(SUPABASE_SQL_SETUP);
-    setCopiedSql(true);
-    setTimeout(() => setCopiedSql(false), 2500);
-  };
-
   const canClose = gamesList.length > 0;
 
   return (
@@ -155,7 +83,7 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
             Salas y Partidas
           </h1>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            Crea, cambia o sincroniza tus partidas
+            Sincronizadas en tiempo real en todos tus dispositivos
           </p>
         </div>
 
@@ -184,32 +112,24 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
 
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto px-4 py-4 max-w-md mx-auto w-full space-y-4">
-        {/* Supabase Cloud Sync Status Pill */}
+        {/* Cloud Sync Active Status Pill */}
         <div className="p-3.5 rounded-3xl bg-white dark:bg-ios-card-dark border border-black/5 dark:border-white/10 shadow-ios-sm flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${cloudConnected ? 'bg-ios-green/15 text-ios-green' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400'}`}>
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-ios-green/15 text-ios-green">
               <Cloud className="w-4 h-4" />
             </div>
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
-                  Nube Supabase
+                  Nube Supabase Conectada
                 </span>
-                <span className={`w-2 h-2 rounded-full ${cloudConnected ? 'bg-ios-green animate-pulse' : 'bg-zinc-300 dark:bg-zinc-600'}`} />
+                <span className="w-2 h-2 rounded-full bg-ios-green animate-pulse" />
               </div>
               <p className="text-[10px] text-zinc-400 font-medium">
-                {cloudConnected ? 'Sincronización multidispositivo activa' : 'Conecta tu Supabase para sincronizar PC y móvil'}
+                Sincronización en vivo multidispositivo activa
               </p>
             </div>
           </div>
-
-          <button
-            type="button"
-            onClick={() => setIsCloudModalOpen(true)}
-            className="text-xs font-bold text-ios-blue px-3 py-1.5 rounded-xl bg-ios-blue/10 hover:bg-ios-blue/20 ios-active"
-          >
-            {cloudConnected ? 'Ajustes' : 'Conectar'}
-          </button>
         </div>
 
         {/* Create Game Trigger Button */}
@@ -297,97 +217,11 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
           </div>
         )}
 
-        {/* Cloud Config Modal */}
-        {isCloudModalOpen && (
-          <div className="p-5 bg-white dark:bg-ios-card-dark rounded-3xl border border-black/10 dark:border-white/10 shadow-ios space-y-4 animate-fadeIn">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Cloud className="w-4 h-4 text-ios-blue" />
-                <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-50">
-                  Configurar Nube Supabase
-                </h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsCloudModalOpen(false)}
-                className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveCloudConfig} className="space-y-3">
-              <div>
-                <label className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 block mb-1">
-                  Project URL:
-                </label>
-                <input
-                  type="text"
-                  value={supabaseUrl}
-                  onChange={(e) => setSupabaseUrl(e.target.value)}
-                  placeholder="https://xyzcompany.supabase.co"
-                  className="w-full px-3 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-xs text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 border border-black/5 dark:border-white/10 font-mono focus:outline-none focus:ring-2 focus:ring-ios-blue"
-                />
-              </div>
-
-              <div>
-                <label className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 block mb-1">
-                  Anon / Public Key:
-                </label>
-                <input
-                  type="password"
-                  value={supabaseKey}
-                  onChange={(e) => setSupabaseKey(e.target.value)}
-                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                  className="w-full px-3 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-xs text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 border border-black/5 dark:border-white/10 font-mono focus:outline-none focus:ring-2 focus:ring-ios-blue"
-                />
-              </div>
-
-              {/* SQL setup copy helper */}
-              <div className="pt-1">
-                <button
-                  type="button"
-                  onClick={copySql}
-                  className="w-full py-2 px-3 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-[11px] font-semibold flex items-center justify-between border border-black/5 dark:border-white/5"
-                >
-                  <span className="truncate">Copiar código SQL de la tabla</span>
-                  {copiedSql ? (
-                    <span className="text-ios-green flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Copiado
-                    </span>
-                  ) : (
-                    <Copy className="w-3.5 h-3.5 text-zinc-400" />
-                  )}
-                </button>
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 rounded-2xl bg-ios-blue text-white text-xs font-bold shadow-sm ios-active"
-                >
-                  Guardar y Sincronizar
-                </button>
-
-                {cloudConnected && (
-                  <button
-                    type="button"
-                    onClick={handleDisconnectCloud}
-                    className="px-3 py-2.5 rounded-2xl bg-ios-red/10 text-ios-red text-xs font-bold ios-active"
-                  >
-                    Desconectar
-                  </button>
-                )}
-              </div>
-            </form>
-          </div>
-        )}
-
         {/* Games List Section */}
         <div>
           <div className="flex items-center justify-between mb-3 px-1">
             <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">
-              Partidas ({gamesList.length})
+              Partidas Sincronizadas ({gamesList.length})
             </span>
           </div>
 
