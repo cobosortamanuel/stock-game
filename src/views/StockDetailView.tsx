@@ -108,8 +108,9 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
             timeRange={timeRange}
             onTimeRangeChange={(r) => setTimeRange(r)}
             isPositive={isPositive}
-            height={220}
+            height={230}
             showTimeSelector={true}
+            positions={userPositions}
           />
         )}
       </div>

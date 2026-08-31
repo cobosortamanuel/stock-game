@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { ChartPoint, TimeRange } from '../../types/market';
+import { ChartPoint, TimeRange, Position } from '../../types/market';
 import { formatCurrency, formatPercent } from '../../services/marketApi';
 
 interface StockChartProps {
@@ -10,6 +10,7 @@ interface StockChartProps {
   basePrice?: number;
   height?: number;
   showTimeSelector?: boolean;
+  positions?: Position[];
 }
 
 export const StockChart: React.FC<StockChartProps> = ({
@@ -20,16 +21,24 @@ export const StockChart: React.FC<StockChartProps> = ({
   basePrice,
   height = 240,
   showTimeSelector = true,
+  positions = [],
 }) => {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const [selectedPositionId, setSelectedPositionId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const points = data && data.length > 0 ? data : [];
 
-  // Determine min and max for scaling
+  // Determine min and max for scaling (incorporating position entry prices if relevant)
   const { minPrice, maxPrice, priceRange, isTrendUp } = useMemo(() => {
     if (points.length === 0) return { minPrice: 0, maxPrice: 100, priceRange: 100, isTrendUp: true };
-    const prices = points.map(p => p.price);
+    const prices = points.map((p) => p.price);
+    
+    // Include entry prices in range calculation so markers never get clipped
+    positions.forEach((pos) => {
+      if (pos.entryPrice) prices.push(pos.entryPrice);
+    });
+
     const min = Math.min(...prices);
     const max = Math.max(...prices);
     const range = max - min === 0 ? 1 : max - min;
@@ -37,13 +46,13 @@ export const StockChart: React.FC<StockChartProps> = ({
     const lastPrice = points[points.length - 1].price;
     const up = lastPrice >= firstPrice;
     return { minPrice: min, maxPrice: max, priceRange: range, isTrendUp: up };
-  }, [points]);
+  }, [points, positions]);
 
   // Dimensions
   const svgWidth = 600;
   const svgHeight = height;
-  const paddingY = 24;
-  const paddingX = 12;
+  const paddingY = 28;
+  const paddingX = 14;
   const usableHeight = svgHeight - paddingY * 2;
   const usableWidth = svgWidth - paddingX * 2;
 
@@ -64,6 +73,50 @@ export const StockChart: React.FC<StockChartProps> = ({
       return { x, y, point: p, index: i };
     });
   }, [points, minPrice, priceRange, svgHeight, usableHeight, usableWidth]);
+
+  // Map Position Markers onto the SVG coordinate space
+  const positionMarkers = useMemo(() => {
+    if (points.length === 0 || positions.length === 0) return [];
+
+    const minTs = points[0].timestamp;
+    const maxTs = points[points.length - 1].timestamp;
+    const timeSpan = maxTs - minTs || 1;
+
+    return positions.map((pos) => {
+      // Calculate X based on openedAt timestamp
+      let x = paddingX + usableWidth * 0.5; // fallback
+      let isWithinTimeRange = false;
+
+      if (pos.openedAt >= minTs && pos.openedAt <= maxTs) {
+        x = paddingX + ((pos.openedAt - minTs) / timeSpan) * usableWidth;
+        isWithinTimeRange = true;
+      } else if (pos.openedAt < minTs) {
+        // Opened before visible window: anchor to left side
+        x = paddingX + 16;
+        isWithinTimeRange = false;
+      } else {
+        // Opened recently
+        x = paddingX + usableWidth - 16;
+        isWithinTimeRange = true;
+      }
+
+      // Calculate Y based on entry price
+      const normalizedY = Math.max(0, Math.min(1, (pos.entryPrice - minPrice) / priceRange));
+      const y = svgHeight - paddingY - normalizedY * usableHeight;
+
+      const isLong = pos.type === 'LONG';
+      const color = isLong ? '#34C759' : '#FF9500';
+
+      return {
+        pos,
+        x,
+        y,
+        isWithinTimeRange,
+        isLong,
+        color,
+      };
+    });
+  }, [points, positions, minPrice, priceRange, svgHeight, usableHeight, usableWidth]);
 
   // Construct authentic financial SVG path
   const { linePath, areaPath } = useMemo(() => {
@@ -170,6 +223,87 @@ export const StockChart: React.FC<StockChartProps> = ({
               className="transition-all duration-150"
             />
           )}
+
+          {/* Trade Entry Position Guidelines & Markers */}
+          {positionMarkers.map((marker) => {
+            const isSelected = selectedPositionId === marker.pos.id;
+            const entryText = `${marker.isLong ? 'LARGO' : 'CORTO'} @ ${formatCurrency(marker.pos.entryPrice)}`;
+
+            return (
+              <g key={marker.pos.id} className="cursor-pointer" onClick={() => setSelectedPositionId(isSelected ? null : marker.pos.id)}>
+                {/* Horizontal Dashed Entry Guideline */}
+                <line
+                  x1={paddingX}
+                  y1={marker.y}
+                  x2={svgWidth - paddingX}
+                  y2={marker.y}
+                  stroke={marker.color}
+                  strokeWidth="1.2"
+                  strokeDasharray="4 3"
+                  strokeOpacity="0.75"
+                />
+
+                {/* Entry Price Tag on Right Edge */}
+                <g transform={`translate(${svgWidth - paddingX - 68}, ${marker.y - 10})`}>
+                  <rect
+                    width="66"
+                    height="18"
+                    rx="5"
+                    fill={marker.color}
+                    className="shadow-sm"
+                  />
+                  <text
+                    x="33"
+                    y="12"
+                    fill="#FFFFFF"
+                    fontSize="9"
+                    fontWeight="bold"
+                    textAnchor="middle"
+                    fontFamily="monospace"
+                  >
+                    {marker.isLong ? '▲ L ' : '▼ C '}
+                    {formatCurrency(marker.pos.entryPrice).replace('$', '')}
+                  </text>
+                </g>
+
+                {/* Position Marker Pin Point on the Chart */}
+                <circle
+                  cx={marker.x}
+                  cy={marker.y}
+                  r="7"
+                  fill={marker.color}
+                  stroke="#FFFFFF"
+                  strokeWidth="2.5"
+                  className="shadow-md"
+                />
+
+                {/* Pin label badge */}
+                <g transform={`translate(${Math.max(paddingX + 40, Math.min(svgWidth - paddingX - 60, marker.x))}, ${marker.y > 50 ? marker.y - 24 : marker.y + 20})`}>
+                  <rect
+                    x="-45"
+                    y="-10"
+                    width="90"
+                    height="20"
+                    rx="6"
+                    fill="#1C1C1E"
+                    stroke={marker.color}
+                    strokeWidth="1.2"
+                    fillOpacity="0.95"
+                  />
+                  <text
+                    x="0"
+                    y="3"
+                    fill="#FFFFFF"
+                    fontSize="9.5"
+                    fontWeight="bold"
+                    textAnchor="middle"
+                  >
+                    {entryText}
+                  </text>
+                </g>
+              </g>
+            );
+          })}
 
           {/* Scrubber Vertical Line & Cursor */}
           {hoverIndex !== null && svgCoordinates[hoverIndex] && (
