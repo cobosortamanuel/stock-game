@@ -1,22 +1,29 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { Position, TradeRecord, PositionType, StockQuote } from '../types/market';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Position, TradeRecord, PositionType, StockQuote, GameSummary, GameSaveData } from '../types/market';
 import { fetchStockData } from '../services/marketApi';
-import { getSavedCloudId, setSavedCloudId, saveGameToCloud, loadGameFromCloud } from '../services/cloudSync';
+import { fetchAllGames, syncGameToCloudAndLocal, loadGameData, deleteGameById, generateGameId } from '../services/gamesHubApi';
 
 interface TradingContextType {
   // Theme
   isDarkMode: boolean;
   toggleDarkMode: () => void;
 
+  // Games Hub / Multi-save
+  activeGameId: string | null;
+  activeGameName: string;
+  gamesList: GameSummary[];
+  isLobbyOpen: boolean;
+  isLoadingGames: boolean;
+  openLobby: () => void;
+  closeLobby: () => void;
+  fetchGamesList: () => Promise<GameSummary[]>;
+  createGame: (name: string, startingCapital: number) => Promise<void>;
+  switchGame: (gameId: string) => Promise<void>;
+  deleteGame: (gameId: string) => Promise<void>;
+
   // PWA Install
   isInstallable: boolean;
   installApp: () => Promise<void>;
-
-  // Cloud Sync
-  cloudSaveId: string;
-  isCloudSyncing: boolean;
-  syncToCloud: () => Promise<{ success: boolean; message: string }>;
-  loadFromCloud: (code: string) => Promise<{ success: boolean; message: string }>;
 
   // Portfolio Cash & Totals
   initialCash: number;
@@ -58,17 +65,15 @@ interface TradingContextType {
 const TradingContext = createContext<TradingContextType | undefined>(undefined);
 
 const STORAGE_KEYS = {
-  PORTFOLIO: 'apex_portfolio_v2',
-  THEME: 'apex_theme_v2',
-  WATCHLIST: 'apex_watchlist_v2',
-  HISTORY: 'apex_history_v2',
+  ACTIVE_GAME_ID: 'apex_active_game_id_v3',
+  THEME: 'apex_theme_v3',
 };
 
 const DEFAULT_INITIAL_BALANCE = 100000;
 const DEFAULT_WATCHLIST = ['NVDA', 'AAPL', 'TSLA', 'MSFT', 'BTC-USD', 'AMZN', 'GOOGL', 'SPY'];
 
 export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Dark Mode State
+  // Theme State
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.THEME);
     if (saved !== null) return saved === 'dark';
@@ -88,7 +93,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const toggleDarkMode = () => setIsDarkMode(prev => !prev);
 
-  // PWA Install Prompt state
+  // PWA Install State
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstallable, setIsInstallable] = useState<boolean>(false);
 
@@ -113,136 +118,125 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  // Cloud ID
-  const [cloudSaveId, setCloudSaveId] = useState<string>(() => getSavedCloudId());
-  const [isCloudSyncing, setIsCloudSyncing] = useState<boolean>(false);
-
-  // Portfolio State
-  const [initialCash, setInitialCash] = useState<number>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.PORTFOLIO);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        return parsed.initialCash || DEFAULT_INITIAL_BALANCE;
-      } catch {
-        return DEFAULT_INITIAL_BALANCE;
-      }
-    }
-    return DEFAULT_INITIAL_BALANCE;
+  // Games Hub State
+  const [gamesList, setGamesList] = useState<GameSummary[]>([]);
+  const [isLoadingGames, setIsLoadingGames] = useState<boolean>(true);
+  const [activeGameId, setActiveGameId] = useState<string | null>(() => {
+    return localStorage.getItem(STORAGE_KEYS.ACTIVE_GAME_ID) || null;
   });
+  const [activeGameName, setActiveGameName] = useState<string>('Partida Principal');
+  const [isLobbyOpen, setIsLobbyOpen] = useState<boolean>(false);
 
-  const [cashAvailable, setCashAvailable] = useState<number>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.PORTFOLIO);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        return parsed.cashAvailable ?? DEFAULT_INITIAL_BALANCE;
-      } catch {
-        return DEFAULT_INITIAL_BALANCE;
-      }
-    }
-    return DEFAULT_INITIAL_BALANCE;
-  });
-
-  const [positions, setPositions] = useState<Position[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.PORTFOLIO);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        return parsed.positions || [];
-      } catch {
-        return [];
-      }
-    }
-    return [];
-  });
-
-  const [tradeHistory, setTradeHistory] = useState<TradeRecord[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.HISTORY);
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return [];
-      }
-    }
-    return [];
-  });
-
-  const [watchlist, setWatchlist] = useState<string[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.WATCHLIST);
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return DEFAULT_WATCHLIST;
-      }
-    }
-    return DEFAULT_WATCHLIST;
-  });
+  // Active Game In-Memory State
+  const [initialCash, setInitialCash] = useState<number>(DEFAULT_INITIAL_BALANCE);
+  const [cashAvailable, setCashAvailable] = useState<number>(DEFAULT_INITIAL_BALANCE);
+  const [positions, setPositions] = useState<Position[]>([]);
+  const [tradeHistory, setTradeHistory] = useState<TradeRecord[]>([]);
+  const [watchlist, setWatchlist] = useState<string[]>(DEFAULT_WATCHLIST);
 
   const [liveQuotes, setLiveQuotes] = useState<Record<string, StockQuote>>({});
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
-  // Persist State to LocalStorage
-  useEffect(() => {
-    localStorage.setItem(
-      STORAGE_KEYS.PORTFOLIO,
-      JSON.stringify({ initialCash, cashAvailable, positions })
-    );
-  }, [initialCash, cashAvailable, positions]);
+  const hasInitialized = useRef(false);
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(tradeHistory));
-  }, [tradeHistory]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.WATCHLIST, JSON.stringify(watchlist));
-  }, [watchlist]);
-
-  // Cloud Sync Handler
-  const syncToCloud = useCallback(async () => {
-    setIsCloudSyncing(true);
+  // Fetch games list from cloud & local registry
+  const fetchGamesList = useCallback(async () => {
+    setIsLoadingGames(true);
     try {
-      const res = await saveGameToCloud(cloudSaveId, {
-        initialCash,
-        cashAvailable,
-        positions,
-        tradeHistory,
-        watchlist,
-      });
-      return res;
+      const list = await fetchAllGames();
+      setGamesList(list);
+      return list;
     } finally {
-      setIsCloudSyncing(false);
+      setIsLoadingGames(false);
     }
-  }, [cloudSaveId, initialCash, cashAvailable, positions, tradeHistory, watchlist]);
+  }, []);
 
-  // Load from Cloud
-  const loadFromCloudHandler = async (code: string) => {
-    setIsCloudSyncing(true);
-    try {
-      const res = await loadGameFromCloud(code);
-      if (res.success && res.data) {
-        setInitialCash(res.data.initialCash);
-        setCashAvailable(res.data.cashAvailable);
-        setPositions(res.data.positions || []);
-        setTradeHistory(res.data.tradeHistory || []);
-        if (res.data.watchlist) setWatchlist(res.data.watchlist);
-        setCloudSaveId(code.toUpperCase());
-        setSavedCloudId(code);
+  // Switch to a game
+  const switchGame = useCallback(async (gameId: string) => {
+    const data = await loadGameData(gameId);
+    if (data) {
+      setActiveGameId(data.id);
+      setActiveGameName(data.name);
+      setInitialCash(data.initialCash);
+      setCashAvailable(data.cashAvailable);
+      setPositions(data.positions || []);
+      setTradeHistory(data.tradeHistory || []);
+      setWatchlist(data.watchlist || DEFAULT_WATCHLIST);
+      localStorage.setItem(STORAGE_KEYS.ACTIVE_GAME_ID, data.id);
+      setIsLobbyOpen(false);
+    }
+  }, []);
+
+  // Create a new game
+  const createGame = useCallback(async (name: string, startingCapital: number) => {
+    const id = generateGameId();
+    const cleanName = name.trim() || `Partida ${id}`;
+    const capital = Number(startingCapital) || DEFAULT_INITIAL_BALANCE;
+
+    const newGame: GameSaveData = {
+      id,
+      name: cleanName,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      initialCash: capital,
+      cashAvailable: capital,
+      cashInvested: 0,
+      totalNetWorth: capital,
+      totalPnL: 0,
+      totalPnLPercent: 0,
+      positionsCount: 0,
+      positions: [],
+      tradeHistory: [],
+      watchlist: DEFAULT_WATCHLIST,
+    };
+
+    await syncGameToCloudAndLocal(newGame);
+    await fetchGamesList();
+    await switchGame(id);
+  }, [fetchGamesList, switchGame]);
+
+  // Delete a game
+  const deleteGame = useCallback(async (gameId: string) => {
+    await deleteGameById(gameId);
+    const updatedList = await fetchGamesList();
+    if (activeGameId === gameId) {
+      if (updatedList.length > 0) {
+        await switchGame(updatedList[0].id);
+      } else {
+        // If no games left, create default
+        await createGame('Partida Principal', DEFAULT_INITIAL_BALANCE);
       }
-      return { success: res.success, message: res.message };
-    } finally {
-      setIsCloudSyncing(false);
     }
-  };
+  }, [activeGameId, fetchGamesList, switchGame, createGame]);
 
-  // Sync quotes from API
+  // App Initialization: Load games and activate selected or default
+  useEffect(() => {
+    if (hasInitialized.current) return;
+    hasInitialized.current = true;
+
+    const init = async () => {
+      const list = await fetchGamesList();
+      const savedActiveId = localStorage.getItem(STORAGE_KEYS.ACTIVE_GAME_ID);
+
+      if (savedActiveId && list.some((g) => g.id === savedActiveId)) {
+        await switchGame(savedActiveId);
+      } else if (list.length > 0) {
+        await switchGame(list[0].id);
+      } else {
+        // No games created yet, create initial default game
+        await createGame('Partida Principal', DEFAULT_INITIAL_BALANCE);
+      }
+    };
+
+    init();
+  }, [fetchGamesList, switchGame, createGame]);
+
+  // Sync Quotes
   const refreshMarketData = useCallback(async () => {
     setIsSyncing(true);
     try {
       const symbolsToFetch = Array.from(
-        new Set([...watchlist, ...positions.map(p => p.symbol), 'NVDA', 'AAPL', 'TSLA', 'BTC-USD'])
+        new Set([...watchlist, ...positions.map((p) => p.symbol), 'NVDA', 'AAPL', 'TSLA', 'BTC-USD'])
       );
 
       const quotesMap: Record<string, StockQuote> = { ...liveQuotes };
@@ -260,8 +254,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       setLiveQuotes(quotesMap);
 
-      setPositions(prevPositions =>
-        prevPositions.map(pos => {
+      setPositions((prevPositions) =>
+        prevPositions.map((pos) => {
           const currentQuote = quotesMap[pos.symbol];
           const curPrice = currentQuote ? currentQuote.price : pos.currentPrice;
 
@@ -285,13 +279,6 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
             currentValue: Math.max(0, currentValue),
             unrealizedPnL,
             unrealizedPnLPercent,
-            timeframePnL: {
-              '1D': unrealizedPnL,
-              '1W': unrealizedPnL * 0.85,
-              '1M': unrealizedPnL * 1.15,
-              '1Y': unrealizedPnL * 1.4,
-              'ALL': unrealizedPnL,
-            }
           };
         })
       );
@@ -300,13 +287,13 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, [watchlist, positions, liveQuotes]);
 
-  // Periodic quotes simulation
+  // Background price ticking
   useEffect(() => {
     refreshMarketData();
     const interval = setInterval(() => {
-      setLiveQuotes(prev => {
+      setLiveQuotes((prev) => {
         const next = { ...prev };
-        Object.keys(next).forEach(sym => {
+        Object.keys(next).forEach((sym) => {
           const tickDelta = (Math.random() - 0.495) * 0.003 * next[sym].price;
           const newPrice = Math.max(0.01, Number((next[sym].price + tickDelta).toFixed(2)));
           const change = Number((newPrice - next[sym].prevClose).toFixed(2));
@@ -321,12 +308,12 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return next;
       });
 
-      setPositions(prev =>
-        prev.map(pos => {
+      setPositions((prev) =>
+        prev.map((pos) => {
           const currentQuote = liveQuotes[pos.symbol];
           if (!currentQuote) return pos;
           const curPrice = currentQuote.price;
-          
+
           let pnl = 0;
           let pnlPct = 0;
           let curVal = pos.investedAmount;
@@ -355,6 +342,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return () => clearInterval(interval);
   }, []);
 
+  // Portfolio Totals
   const cashInvested = useMemo(() => {
     return positions.reduce((acc, pos) => acc + pos.investedAmount, 0);
   }, [positions]);
@@ -390,38 +378,50 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return (dailyPnL / totalNetWorth) * 100;
   }, [dailyPnL, totalNetWorth]);
 
+  // Performance across timeframes
   const portfolioTimeframeReturns = useMemo(() => {
     const allPnl = totalNetWorth - initialCash;
     const allPct = initialCash > 0 ? (allPnl / initialCash) * 100 : 0;
 
     return {
-      '1D': {
-        amount: dailyPnL,
-        percent: dailyPnLPercent,
-      },
-      '1W': {
-        amount: totalPnL * 0.45,
-        percent: totalPnLPercent * 0.45,
-      },
-      '1M': {
-        amount: totalPnL * 0.85,
-        percent: totalPnLPercent * 0.85,
-      },
-      '1Y': {
-        amount: allPnl * 1.2,
-        percent: allPct * 1.2,
-      },
-      '5Y': {
-        amount: allPnl * 2.5,
-        percent: allPct * 2.5,
-      },
-      'ALL': {
-        amount: allPnl,
-        percent: allPct,
-      },
+      '1D': { amount: dailyPnL, percent: dailyPnLPercent },
+      '1W': { amount: totalPnL * 0.45, percent: totalPnLPercent * 0.45 },
+      '1M': { amount: totalPnL * 0.85, percent: totalPnLPercent * 0.85 },
+      '1Y': { amount: allPnl * 1.2, percent: allPct * 1.2 },
+      '5Y': { amount: allPnl * 2.5, percent: allPct * 2.5 },
+      'ALL': { amount: allPnl, percent: allPct },
     };
   }, [dailyPnL, dailyPnLPercent, totalPnL, totalPnLPercent, totalNetWorth, initialCash]);
 
+  // Auto-sync game to cloud & local whenever state changes
+  useEffect(() => {
+    if (!activeGameId) return;
+
+    const gamePayload: GameSaveData = {
+      id: activeGameId,
+      name: activeGameName,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      initialCash,
+      cashAvailable,
+      cashInvested,
+      totalNetWorth,
+      totalPnL,
+      totalPnLPercent,
+      positionsCount: positions.length,
+      positions,
+      tradeHistory,
+      watchlist,
+    };
+
+    const timer = setTimeout(() => {
+      syncGameToCloudAndLocal(gamePayload);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [activeGameId, activeGameName, initialCash, cashAvailable, cashInvested, totalNetWorth, totalPnL, totalPnLPercent, positions, tradeHistory, watchlist]);
+
+  // Trade Execution: Open Position
   const openPosition = (
     symbol: string,
     name: string,
@@ -454,13 +454,6 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       unrealizedPnL: 0,
       unrealizedPnLPercent: 0,
       openedAt: Date.now(),
-      timeframePnL: {
-        '1D': 0,
-        '1W': 0,
-        '1M': 0,
-        '1Y': 0,
-        'ALL': 0,
-      }
     };
 
     const newTrade: TradeRecord = {
@@ -475,21 +468,22 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       timestamp: Date.now(),
     };
 
-    setCashAvailable(prev => prev - cleanAmount);
-    setPositions(prev => [newPosition, ...prev]);
-    setTradeHistory(prev => [newTrade, ...prev]);
+    setCashAvailable((prev) => prev - cleanAmount);
+    setPositions((prev) => [newPosition, ...prev]);
+    setTradeHistory((prev) => [newTrade, ...prev]);
 
     return {
       success: true,
-      message: `Posición ${type === 'LONG' ? 'en Largo (A favor)' : 'en Corto (A la baja)'} abierta exitosamente con $${cleanAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}.`
+      message: `Posición ${type === 'LONG' ? 'en Largo (A favor)' : 'en Corto (A la baja)'} abierta con $${cleanAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}.`
     };
   };
 
+  // Trade Execution: Close Position
   const closePosition = (
     positionId: string,
     percentageToClose: number = 100
   ): { success: boolean; message: string } => {
-    const targetPos = positions.find(p => p.id === positionId);
+    const targetPos = positions.find((p) => p.id === positionId);
     if (!targetPos) {
       return { success: false, message: 'Posición no encontrada.' };
     }
@@ -502,7 +496,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const realizedPnLPercent = targetPos.unrealizedPnLPercent;
 
     const cashToReturn = Math.max(0, closedCurrentValue);
-    setCashAvailable(prev => prev + cashToReturn);
+    setCashAvailable((prev) => prev + cashToReturn);
 
     const closeTrade: TradeRecord = {
       id: `trade_${Date.now()}`,
@@ -519,13 +513,13 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       timestamp: Date.now(),
     };
 
-    setTradeHistory(prev => [closeTrade, ...prev]);
+    setTradeHistory((prev) => [closeTrade, ...prev]);
 
     if (fraction >= 0.999) {
-      setPositions(prev => prev.filter(p => p.id !== positionId));
+      setPositions((prev) => prev.filter((p) => p.id !== positionId));
     } else {
-      setPositions(prev =>
-        prev.map(p => {
+      setPositions((prev) =>
+        prev.map((p) => {
           if (p.id !== positionId) return p;
           const remainingShares = p.shares - closedShares;
           const remainingInvested = p.investedAmount - closedInvested;
@@ -547,9 +541,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const toggleWatchlist = (symbol: string) => {
-    setWatchlist(prev => {
+    setWatchlist((prev) => {
       if (prev.includes(symbol)) {
-        return prev.filter(s => s !== symbol);
+        return prev.filter((s) => s !== symbol);
       } else {
         return [...prev, symbol];
       }
@@ -561,8 +555,6 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setCashAvailable(newBalance);
     setPositions([]);
     setTradeHistory([]);
-    localStorage.removeItem(STORAGE_KEYS.PORTFOLIO);
-    localStorage.removeItem(STORAGE_KEYS.HISTORY);
   };
 
   return (
@@ -570,12 +562,22 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       value={{
         isDarkMode,
         toggleDarkMode,
+        activeGameId,
+        activeGameName,
+        gamesList,
+        isLobbyOpen,
+        isLoadingGames,
+        openLobby: () => {
+          fetchGamesList();
+          setIsLobbyOpen(true);
+        },
+        closeLobby: () => setIsLobbyOpen(false),
+        fetchGamesList,
+        createGame,
+        switchGame,
+        deleteGame,
         isInstallable,
         installApp,
-        cloudSaveId,
-        isCloudSyncing,
-        syncToCloud,
-        loadFromCloud: loadFromCloudHandler,
         initialCash,
         cashAvailable,
         cashInvested,

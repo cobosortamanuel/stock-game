@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Moon, Sun, RotateCcw, Smartphone, Cloud, UploadCloud, DownloadCloud, Copy, Check, Loader2, Download } from 'lucide-react';
+import { Moon, Sun, RotateCcw, Smartphone, Cloud, UploadCloud, DownloadCloud, Copy, Check, Loader2, Download, FolderKanban, PlusCircle } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { formatCurrency } from '../services/marketApi';
 
@@ -11,18 +11,15 @@ export const SettingsView: React.FC = () => {
     installApp,
     initialCash,
     resetAccount,
-    cloudSaveId,
-    isCloudSyncing,
-    syncToCloud,
-    loadFromCloud,
+    activeGameName,
+    activeGameId,
+    openLobby,
+    gamesList,
   } = useTrading();
 
   const [selectedCapital, setSelectedCapital] = useState<number>(initialCash);
   const [isResetConfirming, setIsResetConfirming] = useState<boolean>(false);
   const [resetSuccess, setResetSuccess] = useState<boolean>(false);
-  const [inputCode, setInputCode] = useState<string>('');
-  const [syncStatus, setSyncStatus] = useState<{ success: boolean; message: string } | null>(null);
-  const [copiedCode, setCopiedCode] = useState<boolean>(false);
 
   const capitalOptions = [10000, 50000, 100000, 500000, 1000000];
 
@@ -31,28 +28,6 @@ export const SettingsView: React.FC = () => {
     setIsResetConfirming(false);
     setResetSuccess(true);
     setTimeout(() => setResetSuccess(false), 2000);
-  };
-
-  const handleSaveToCloud = async () => {
-    const res = await syncToCloud();
-    setSyncStatus(res);
-    setTimeout(() => setSyncStatus(null), 3000);
-  };
-
-  const handleLoadFromCloud = async () => {
-    if (!inputCode.trim()) return;
-    const res = await loadFromCloud(inputCode.trim());
-    setSyncStatus(res);
-    if (res.success) {
-      setInputCode('');
-    }
-    setTimeout(() => setSyncStatus(null), 3000);
-  };
-
-  const copyCodeToClipboard = () => {
-    navigator.clipboard.writeText(cloudSaveId);
-    setCopiedCode(true);
-    setTimeout(() => setCopiedCode(false), 2000);
   };
 
   return (
@@ -79,95 +54,47 @@ export const SettingsView: React.FC = () => {
         </div>
       )}
 
-      {/* Cloud Save & Cross-device Sync */}
+      {/* Active Game & Multi-Save Lobby Switcher */}
       <div className="bg-white dark:bg-ios-card-dark rounded-3xl p-5 border border-black/5 dark:border-white/5 shadow-ios-sm space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-ios-blue/15 text-ios-blue flex items-center justify-center font-bold">
-              <Cloud className="w-4 h-4" />
+              <FolderKanban className="w-4 h-4" />
             </div>
             <div>
               <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-50">
-                Guardado en la Nube y Sincronización
+                Gestor de Partidas en Vivo
               </h2>
               <p className="text-[11px] text-zinc-400">
-                Guarda tu partida online para continuarla en cualquier dispositivo.
+                {gamesList.length} partida(s) sincronizadas en la nube
               </p>
             </div>
           </div>
         </div>
 
-        {/* Current Code Pill */}
-        <div className="p-3 bg-zinc-100 dark:bg-zinc-800/80 rounded-2xl flex items-center justify-between">
+        {/* Current Game Pill */}
+        <div className="p-3.5 bg-zinc-100 dark:bg-zinc-800/80 rounded-2xl flex items-center justify-between">
           <div>
             <span className="text-[10px] uppercase font-bold text-zinc-400 block tracking-wider">
-              Tu Código de Partida
+              Partida Actual
             </span>
-            <span className="text-lg font-mono font-extrabold text-zinc-900 dark:text-zinc-50 tracking-wider">
-              {cloudSaveId}
+            <span className="text-base font-bold text-zinc-900 dark:text-zinc-50">
+              {activeGameName}
+            </span>
+            <span className="text-[11px] font-mono text-zinc-400 block">
+              ID: {activeGameId}
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={copyCodeToClipboard}
-              className="p-2 rounded-xl bg-white dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-semibold flex items-center gap-1 shadow-sm ios-active"
-            >
-              {copiedCode ? <Check className="w-4 h-4 text-ios-green" /> : <Copy className="w-4 h-4" />}
-            </button>
-
-            <button
-              type="button"
-              onClick={handleSaveToCloud}
-              disabled={isCloudSyncing}
-              className="py-2 px-3 rounded-xl bg-ios-blue text-white text-xs font-bold flex items-center gap-1.5 shadow-sm ios-active"
-            >
-              {isCloudSyncing ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <UploadCloud className="w-4 h-4" />
-              )}
-              <span>Guardar en Nube</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Restore with code */}
-        <div className="pt-2 border-t border-black/5 dark:border-white/5 flex gap-2">
-          <input
-            type="text"
-            value={inputCode}
-            onChange={(e) => setInputCode(e.target.value.toUpperCase())}
-            placeholder="Introduce código de partida (ej. 8K2M9X)"
-            className="flex-1 px-3 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-xs font-mono font-semibold placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-ios-blue"
-          />
           <button
             type="button"
-            onClick={handleLoadFromCloud}
-            disabled={!inputCode.trim() || isCloudSyncing}
-            className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1 ios-active ${
-              !inputCode.trim()
-                ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-400'
-                : 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
-            }`}
+            onClick={openLobby}
+            className="py-2 px-3.5 rounded-xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-bold shadow-sm ios-active flex items-center gap-1.5"
           >
-            <DownloadCloud className="w-3.5 h-3.5" />
-            <span>Cargar</span>
+            <FolderKanban className="w-3.5 h-3.5 text-ios-blue" />
+            <span>Ver Partidas</span>
           </button>
         </div>
-
-        {syncStatus && (
-          <div
-            className={`p-2.5 rounded-xl text-xs font-medium text-center ${
-              syncStatus.success
-                ? 'bg-ios-green/15 text-ios-green border border-ios-green/30'
-                : 'bg-ios-red/15 text-ios-red border border-ios-red/30'
-            }`}
-          >
-            {syncStatus.message}
-          </div>
-        )}
       </div>
 
       {/* Visual Theme Settings */}
@@ -315,7 +242,7 @@ export const SettingsView: React.FC = () => {
         <ol className="mt-2 space-y-1.5 text-xs text-zinc-600 dark:text-zinc-300 list-decimal list-inside">
           <li>Abre el enlace en Google Chrome en tu móvil Android.</li>
           <li>Pulsa en el menú (tres puntos arriba a la derecha).</li>
-          <li>Selecciona <strong>"Añadir a pantalla de inicio"</strong> o el botón <strong>"Instalar"</strong> del menú superior.</li>
+          <li>Selecciona <strong>"Añadir a pantalla de inicio"</strong>.</li>
         </ol>
       </div>
     </div>

@@ -94,3 +94,23 @@ export interface SearchResult {
   exchange: string;
   type: string;
 }
+
+export interface GameSummary {
+  id: string;
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+  initialCash: number;
+  cashAvailable: number;
+  cashInvested: number;
+  totalNetWorth: number;
+  totalPnL: number;
+  totalPnLPercent: number;
+  positionsCount: number;
+}
+
+export interface GameSaveData extends GameSummary {
+  positions: Position[];
+  tradeHistory: TradeRecord[];
+  watchlist: string[];
+}

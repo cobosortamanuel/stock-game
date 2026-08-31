@@ -8,9 +8,10 @@ import { MarketsView } from './views/MarketsView';
 import { StockDetailView } from './views/StockDetailView';
 import { HistoryView } from './views/HistoryView';
 import { SettingsView } from './views/SettingsView';
+import { GamesLobbyView } from './views/GamesLobbyView';
 
 function AppContent() {
-  const { positions } = useTrading();
+  const { positions, isLobbyOpen, closeLobby } = useTrading();
   const [activeTab, setActiveTab] = useState<TabType>('portfolio');
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
@@ -96,6 +97,9 @@ function AppContent() {
           setIsSearchOpen(false);
         }}
       />
+
+      {/* Games Lobby View Modal */}
+      {isLobbyOpen && <GamesLobbyView onClose={closeLobby} />}
     </div>
   );
 }
