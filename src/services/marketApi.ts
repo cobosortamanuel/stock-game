@@ -1,31 +1,44 @@
 import { StockQuote, ChartPoint, TimeRange, SearchResult } from '../types/market';
 
-// Pre-configured popular stocks with authentic base data
+// Pre-configured popular stocks with authentic market base data
 export const POPULAR_SYMBOLS = [
-  { symbol: 'TTWO', name: 'Take-Two Interactive Software, Inc.', sector: 'Videojuegos / GTA', basePrice: 172.4 },
-  { symbol: 'NVDA', name: 'NVIDIA Corporation', sector: 'Semiconductores', basePrice: 128.5 },
-  { symbol: 'AAPL', name: 'Apple Inc.', sector: 'Tecnología', basePrice: 224.2 },
-  { symbol: 'TSLA', name: 'Tesla, Inc.', sector: 'Automotriz', basePrice: 214.8 },
-  { symbol: 'MSFT', name: 'Microsoft Corporation', sector: 'Software', basePrice: 418.5 },
-  { symbol: 'AMZN', name: 'Amazon.com, Inc.', sector: 'Comercio Electrónico', basePrice: 178.4 },
-  { symbol: 'GOOGL', name: 'Alphabet Inc.', sector: 'Internet', basePrice: 164.3 },
-  { symbol: 'META', name: 'Meta Platforms, Inc.', sector: 'Redes Sociales', basePrice: 512.9 },
-  { symbol: 'AMD', name: 'Advanced Micro Devices', sector: 'Semiconductores', basePrice: 146.7 },
-  { symbol: 'PLTR', name: 'Palantir Technologies', sector: 'Inteligencia Artificial', basePrice: 31.4 },
-  { symbol: 'BTC-USD', name: 'Bitcoin (USD)', sector: 'Criptomonedas', basePrice: 63850.0 },
-  { symbol: 'ETH-USD', name: 'Ethereum (USD)', sector: 'Criptomonedas', basePrice: 2540.0 },
-  { symbol: 'NFLX', name: 'Netflix, Inc.', sector: 'Streaming / Entretenimiento', basePrice: 685.2 },
-  { symbol: 'COIN', name: 'Coinbase Global, Inc.', sector: 'Criptomonedas Exchange', basePrice: 218.6 },
-  { symbol: 'DIS', name: 'The Walt Disney Company', sector: 'Entretenimiento', basePrice: 94.8 },
-  { symbol: 'EA', name: 'Electronic Arts Inc.', sector: 'Videojuegos / Deportes', basePrice: 144.2 },
-  { symbol: 'SPY', name: 'SPDR S&P 500 ETF Trust', sector: 'Índices ETF', basePrice: 562.3 },
-  { symbol: 'QQQ', name: 'Invesco QQQ Trust (Nasdaq 100)', sector: 'Índices ETF', basePrice: 478.1 },
+  { symbol: 'TTWO', name: 'Take-Two Interactive Software, Inc.', sector: 'Videojuegos / GTA', basePrice: 219.70 },
+  { symbol: 'NVDA', name: 'NVIDIA Corporation', sector: 'Semiconductores', basePrice: 128.50 },
+  { symbol: 'AAPL', name: 'Apple Inc.', sector: 'Tecnología', basePrice: 224.20 },
+  { symbol: 'TSLA', name: 'Tesla, Inc.', sector: 'Automotriz', basePrice: 367.95 },
+  { symbol: 'MSFT', name: 'Microsoft Corporation', sector: 'Software', basePrice: 418.50 },
+  { symbol: 'AMZN', name: 'Amazon.com, Inc.', sector: 'Comercio Electrónico', basePrice: 178.40 },
+  { symbol: 'GOOGL', name: 'Alphabet Inc.', sector: 'Internet', basePrice: 164.30 },
+  { symbol: 'META', name: 'Meta Platforms, Inc.', sector: 'Redes Sociales', basePrice: 512.90 },
+  { symbol: 'AMD', name: 'Advanced Micro Devices', sector: 'Semiconductores', basePrice: 146.70 },
+  { symbol: 'PLTR', name: 'Palantir Technologies', sector: 'Inteligencia Artificial', basePrice: 31.40 },
+  { symbol: 'BTC-USD', name: 'Bitcoin (USD)', sector: 'Criptomonedas', basePrice: 63850.00 },
+  { symbol: 'ETH-USD', name: 'Ethereum (USD)', sector: 'Criptomonedas', basePrice: 2540.00 },
+  { symbol: 'NFLX', name: 'Netflix, Inc.', sector: 'Streaming / Entretenimiento', basePrice: 685.20 },
+  { symbol: 'COIN', name: 'Coinbase Global, Inc.', sector: 'Criptomonedas Exchange', basePrice: 218.60 },
+  { symbol: 'DIS', name: 'The Walt Disney Company', sector: 'Entretenimiento', basePrice: 94.80 },
+  { symbol: 'EA', name: 'Electronic Arts Inc.', sector: 'Videojuegos / Deportes', basePrice: 144.20 },
+  { symbol: 'SPY', name: 'SPDR S&P 500 ETF Trust', sector: 'Índices ETF', basePrice: 562.30 },
+  { symbol: 'QQQ', name: 'Invesco QQQ Trust (Nasdaq 100)', sector: 'Índices ETF', basePrice: 478.10 },
   { symbol: 'SAN.MC', name: 'Banco Santander S.A.', sector: 'Banca Española', basePrice: 4.45 },
-  { symbol: 'ITX.MC', name: 'Industria de Diseño Textil (Inditex)', sector: 'Moda Retail', basePrice: 48.9 },
+  { symbol: 'ITX.MC', name: 'Industria de Diseño Textil (Inditex)', sector: 'Moda Retail', basePrice: 48.90 },
 ];
 
-// Persistent quote state cache across views
-const quoteMemoryCache: Record<string, StockQuote> = {};
+const QUOTE_CACHE_KEY = 'apex_quote_cache_v3';
+
+function getStoredQuote(symbol: string): StockQuote | null {
+  try {
+    const raw = localStorage.getItem(`${QUOTE_CACHE_KEY}_${symbol}`);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+}
+
+function storeQuote(quote: StockQuote) {
+  try {
+    localStorage.setItem(`${QUOTE_CACHE_KEY}_${quote.symbol}`, JSON.stringify(quote));
+  } catch {}
+}
 
 export const formatCurrency = (value: number, currency: string = 'USD', compact: boolean = false): string => {
   if (isNaN(value)) return '$0.00';
@@ -185,7 +198,7 @@ function generateSyntheticChart(symbol: string, range: TimeRange, currentPrice: 
   return points;
 }
 
-// Fetch Stock Quote and Chart with solid consistency
+// Fetch Stock Quote and Chart with persistent cache and resilient failover
 export async function fetchStockData(symbol: string, range: TimeRange = '1D'): Promise<{ quote: StockQuote; chart: ChartPoint[] }> {
   const cleanSymbol = symbol.trim().toUpperCase();
   const { range: apiRange, interval } = getTimeRangeParams(range);
@@ -194,12 +207,13 @@ export async function fetchStockData(symbol: string, range: TimeRange = '1D'): P
   const fetchUrls = [
     `/api/market/chart/${cleanSymbol}?range=${apiRange}&interval=${interval}`,
     `https://api.allorigins.win/raw?url=${encodeURIComponent(targetYahooUrl)}`,
+    targetYahooUrl,
   ];
 
   for (const url of fetchUrls) {
     try {
       const response = await fetch(url, {
-        signal: AbortSignal.timeout(2200),
+        signal: AbortSignal.timeout(2400),
       });
       
       if (response.ok) {
@@ -277,7 +291,7 @@ export async function fetchStockData(symbol: string, range: TimeRange = '1D'): P
             }
           };
 
-          quoteMemoryCache[cleanSymbol] = quote;
+          storeQuote(quote);
 
           if (chartPoints.length > 0) {
             return { quote, chart: chartPoints };
@@ -289,12 +303,12 @@ export async function fetchStockData(symbol: string, range: TimeRange = '1D'): P
     }
   }
 
-  // Consistent Fallback using cached quote if present
-  let quote = quoteMemoryCache[cleanSymbol];
+  // Consistent Fallback using stored persistent quote if available
+  let quote = getStoredQuote(cleanSymbol);
   if (!quote) {
     const popMatch = POPULAR_SYMBOLS.find(p => p.symbol.toUpperCase() === cleanSymbol);
     const basePrice = popMatch ? popMatch.basePrice : 150.0;
-    const simulatedChange = -0.88;
+    const simulatedChange = -0.81;
     const currentPrice = Number((basePrice * (1 + simulatedChange / 100)).toFixed(2));
     const changeVal = Number((currentPrice - basePrice).toFixed(2));
 
@@ -325,7 +339,7 @@ export async function fetchStockData(symbol: string, range: TimeRange = '1D'): P
         'ALL': 350.0,
       }
     };
-    quoteMemoryCache[cleanSymbol] = quote;
+    storeQuote(quote);
   }
 
   const chart = generateSyntheticChart(cleanSymbol, range, quote.price);
