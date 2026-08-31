@@ -23,6 +23,9 @@ export const POPULAR_SYMBOLS = [
   { symbol: 'ITX.MC', name: 'Industria de Diseño Textil (Inditex)', sector: 'Moda Retail', basePrice: 48.90 },
 ];
 
+const SUPABASE_PROJECT_URL = 'https://vvxfewktdsltzsxfumio.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_RXWhW8Lu_vIehqKQJAPsQw_GkvczmaZ';
+
 export const formatCurrency = (value: number, currency: string = 'USD', compact: boolean = false): string => {
   if (isNaN(value)) return '$0.00';
   
@@ -71,7 +74,7 @@ function getTimeRangeParams(range: TimeRange): { range: string; interval: string
   }
 }
 
-// Fetch live Stock Quote and Chart directly from authentic market feeds
+// Fetch live Stock Quote and Chart directly from authentic market feeds via Supabase Edge Function & Resilient Fallbacks
 export async function fetchStockData(
   symbol: string,
   range: TimeRange = '1D'
@@ -79,18 +82,32 @@ export async function fetchStockData(
   const cleanSymbol = symbol.trim().toUpperCase();
   const { range: apiRange, interval } = getTimeRangeParams(range);
 
+  const supabaseFunctionUrl = `${SUPABASE_PROJECT_URL}/functions/v1/market?symbol=${encodeURIComponent(cleanSymbol)}&range=${apiRange}&interval=${interval}`;
   const targetYahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanSymbol}?range=${apiRange}&interval=${interval}`;
-  const fetchUrls = [
-    `/api/market/chart/${cleanSymbol}?range=${apiRange}&interval=${interval}`,
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(targetYahooUrl)}`,
-    `https://corsproxy.io/?url=${encodeURIComponent(targetYahooUrl)}`,
-    targetYahooUrl,
+
+  const fetchConfigs = [
+    {
+      url: supabaseFunctionUrl,
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+    },
+    {
+      url: `https://api.allorigins.win/raw?url=${encodeURIComponent(targetYahooUrl)}`,
+      headers: {},
+    },
+    {
+      url: `/api/market/chart/${cleanSymbol}?range=${apiRange}&interval=${interval}`,
+      headers: {},
+    },
   ];
 
-  for (const url of fetchUrls) {
+  for (const config of fetchConfigs) {
     try {
-      const response = await fetch(url, {
-        signal: AbortSignal.timeout(3500),
+      const response = await fetch(config.url, {
+        headers: config.headers,
+        signal: AbortSignal.timeout(4000),
       });
 
       if (response.ok) {
@@ -177,7 +194,7 @@ export async function fetchStockData(
         }
       }
     } catch {
-      // Continue to next endpoint
+      // Continue to next provider
     }
   }
 
