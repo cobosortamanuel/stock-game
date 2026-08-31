@@ -8,6 +8,10 @@ interface TradingContextType {
   isDarkMode: boolean;
   toggleDarkMode: () => void;
 
+  // PWA Install
+  isInstallable: boolean;
+  installApp: () => Promise<void>;
+
   // Cloud Sync
   cloudSaveId: string;
   isCloudSyncing: boolean;
@@ -68,7 +72,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.THEME);
     if (saved !== null) return saved === 'dark';
-    return true; // Default dark iOS style
+    return true;
   });
 
   useEffect(() => {
@@ -83,6 +87,31 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [isDarkMode]);
 
   const toggleDarkMode = () => setIsDarkMode(prev => !prev);
+
+  // PWA Install Prompt state
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isInstallable, setIsInstallable] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setIsInstallable(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  }, []);
+
+  const installApp = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setIsInstallable(false);
+      setDeferredPrompt(null);
+    }
+  };
 
   // Cloud ID
   const [cloudSaveId, setCloudSaveId] = useState<string>(() => getSavedCloudId());
@@ -218,7 +247,6 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       const quotesMap: Record<string, StockQuote> = { ...liveQuotes };
 
-      // Batch requests smoothly
       await Promise.all(
         symbolsToFetch.map(async (sym) => {
           try {
@@ -232,7 +260,6 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       setLiveQuotes(quotesMap);
 
-      // Recalculate Positions with updated prices
       setPositions(prevPositions =>
         prevPositions.map(pos => {
           const currentQuote = quotesMap[pos.symbol];
@@ -247,7 +274,6 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
             unrealizedPnLPercent = pos.entryPrice > 0 ? ((curPrice - pos.entryPrice) / pos.entryPrice) * 100 : 0;
             currentValue = pos.shares * curPrice;
           } else {
-            // SHORT: Profit if current price dropped below entry price
             unrealizedPnL = (pos.entryPrice - curPrice) * pos.shares;
             unrealizedPnLPercent = pos.entryPrice > 0 ? ((pos.entryPrice - curPrice) / pos.entryPrice) * 100 : 0;
             currentValue = pos.investedAmount + unrealizedPnL;
@@ -274,11 +300,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, [watchlist, positions, liveQuotes]);
 
-  // Initial fetch and 4-second interval background quote updates
+  // Periodic quotes simulation
   useEffect(() => {
     refreshMarketData();
     const interval = setInterval(() => {
-      // Subtle live tick simulation for open positions
       setLiveQuotes(prev => {
         const next = { ...prev };
         Object.keys(next).forEach(sym => {
@@ -296,7 +321,6 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return next;
       });
 
-      // Update positions live
       setPositions(prev =>
         prev.map(pos => {
           const currentQuote = liveQuotes[pos.symbol];
@@ -331,7 +355,6 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return () => clearInterval(interval);
   }, []);
 
-  // Compute Aggregate Financial Metrics
   const cashInvested = useMemo(() => {
     return positions.reduce((acc, pos) => acc + pos.investedAmount, 0);
   }, [positions]);
@@ -367,7 +390,6 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return (dailyPnL / totalNetWorth) * 100;
   }, [dailyPnL, totalNetWorth]);
 
-  // Performance breakdown across timeframes
   const portfolioTimeframeReturns = useMemo(() => {
     const allPnl = totalNetWorth - initialCash;
     const allPct = initialCash > 0 ? (allPnl / initialCash) * 100 : 0;
@@ -400,7 +422,6 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
   }, [dailyPnL, dailyPnLPercent, totalPnL, totalPnLPercent, totalNetWorth, initialCash]);
 
-  // Open Position (LONG or SHORT)
   const openPosition = (
     symbol: string,
     name: string,
@@ -464,7 +485,6 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
   };
 
-  // Close Position
   const closePosition = (
     positionId: string,
     percentageToClose: number = 100
@@ -481,7 +501,6 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const realizedPnL = targetPos.unrealizedPnL * fraction;
     const realizedPnLPercent = targetPos.unrealizedPnLPercent;
 
-    // Release cash: invested + pnl
     const cashToReturn = Math.max(0, closedCurrentValue);
     setCashAvailable(prev => prev + cashToReturn);
 
@@ -503,10 +522,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setTradeHistory(prev => [closeTrade, ...prev]);
 
     if (fraction >= 0.999) {
-      // Full close
       setPositions(prev => prev.filter(p => p.id !== positionId));
     } else {
-      // Partial close
       setPositions(prev =>
         prev.map(p => {
           if (p.id !== positionId) return p;
@@ -553,6 +570,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       value={{
         isDarkMode,
         toggleDarkMode,
+        isInstallable,
+        installApp,
         cloudSaveId,
         isCloudSyncing,
         syncToCloud,

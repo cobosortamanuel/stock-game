@@ -3,11 +3,12 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App'
 
-// Register Service Worker for PWA installability on Android / Chrome
-if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+// Register Service Worker with dynamic base path for GitHub Pages / custom domains
+if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((err) => {
-      console.log('SW registration error:', err);
+    const swUrl = `${import.meta.env.BASE_URL}sw.js`;
+    navigator.serviceWorker.register(swUrl).catch((err) => {
+      console.log('SW registration note:', err);
     });
   });
 }

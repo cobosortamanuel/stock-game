@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Moon, Sun, RefreshCw, Activity } from 'lucide-react';
+import { Search, Moon, Sun, RefreshCw, Download } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 
 interface HeaderProps {
@@ -13,7 +13,7 @@ export const Header: React.FC<HeaderProps> = ({
   subtitle,
   onOpenSearch,
 }) => {
-  const { isDarkMode, toggleDarkMode, isSyncing, refreshMarketData } = useTrading();
+  const { isDarkMode, toggleDarkMode, isSyncing, refreshMarketData, isInstallable, installApp } = useTrading();
 
   return (
     <header className="sticky top-0 z-30 w-full pt-safe ios-glass-header border-b border-black/5 dark:border-white/10 transition-colors duration-200">
@@ -43,6 +43,19 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right Controls */}
         <div className="flex items-center gap-1">
+          {/* Direct PWA Install Button when Chrome enables it */}
+          {isInstallable && (
+            <button
+              type="button"
+              onClick={installApp}
+              className="px-2.5 py-1 rounded-full bg-ios-blue text-white text-xs font-bold flex items-center gap-1 shadow-sm ios-active animate-pulse"
+              title="Instalar en Android"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Instalar</span>
+            </button>
+          )}
+
           {/* Quick Search Trigger */}
           <button
             type="button"
