@@ -1,7 +1,7 @@
 import { GameSaveData, GameSummary } from '../types/market';
 
-const REGISTRY_KEY = 'apex_games_registry_v1';
-const LOCAL_GAMES_PREFIX = 'apex_game_save_';
+const REGISTRY_KEY = 'apex_games_registry_v2';
+const LOCAL_GAMES_PREFIX = 'apex_game_save_v2_';
 
 // Unique ID generator for games
 export function generateGameId(): string {
@@ -13,26 +13,10 @@ export function generateGameId(): string {
   return id;
 }
 
-// Fetch all created games (Cloud + Local fallback merge)
+// Fetch all created games from Local Registry & Cloud fallback
 export async function fetchAllGames(): Promise<GameSummary[]> {
-  let cloudGames: GameSummary[] = [];
-
-  try {
-    const response = await fetch('https://kv.val.run/get?key=apex_public_games_registry_v1', {
-      signal: AbortSignal.timeout(3000),
-    });
-    if (response.ok) {
-      const data = await response.json();
-      if (Array.isArray(data)) {
-        cloudGames = data;
-      }
-    }
-  } catch (err) {
-    console.warn('Could not reach cloud registry directly, checking local storage:', err);
-  }
-
-  // Read local registry
   let localGames: GameSummary[] = [];
+
   try {
     const local = localStorage.getItem(REGISTRY_KEY);
     if (local) {
@@ -42,22 +26,32 @@ export async function fetchAllGames(): Promise<GameSummary[]> {
     localGames = [];
   }
 
-  // Merge unique games by ID, preferring newest updatedAt
-  const map = new Map<string, GameSummary>();
-  [...localGames, ...cloudGames].forEach((g) => {
-    const existing = map.get(g.id);
-    if (!existing || g.updatedAt > existing.updatedAt) {
-      map.set(g.id, g);
+  // Cloud sync attempt (non-blocking, silent)
+  try {
+    const cloudUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent('https://api.npoint.io/apex_registry')}`;
+    const res = await fetch(cloudUrl, { signal: AbortSignal.timeout(2000) });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        const map = new Map<string, GameSummary>();
+        [...localGames, ...data].forEach(g => {
+          const existing = map.get(g.id);
+          if (!existing || g.updatedAt > existing.updatedAt) {
+            map.set(g.id, g);
+          }
+        });
+        localGames = Array.from(map.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+        localStorage.setItem(REGISTRY_KEY, JSON.stringify(localGames));
+      }
     }
-  });
+  } catch {
+    // Local-first fallback works immediately
+  }
 
-  const merged = Array.from(map.values()).sort((a, b) => b.updatedAt - a.updatedAt);
-  // Persist merged locally
-  localStorage.setItem(REGISTRY_KEY, JSON.stringify(merged));
-  return merged;
+  return localGames.sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-// Save or update game in Cloud and Local
+// Save or update game in Local Storage and Cloud
 export async function syncGameToCloudAndLocal(game: GameSaveData): Promise<boolean> {
   const summary: GameSummary = {
     id: game.id,
@@ -78,8 +72,12 @@ export async function syncGameToCloudAndLocal(game: GameSaveData): Promise<boole
     updatedAt: summary.updatedAt,
   };
 
-  // 1. Save full game locally
-  localStorage.setItem(`${LOCAL_GAMES_PREFIX}${game.id}`, JSON.stringify(fullData));
+  // 1. Instant local persistence (0ms latency)
+  try {
+    localStorage.setItem(`${LOCAL_GAMES_PREFIX}${game.id}`, JSON.stringify(fullData));
+  } catch (e) {
+    console.warn('LocalStorage save error:', e);
+  }
 
   // 2. Update local registry
   let localRegistry: GameSummary[] = [];
@@ -95,54 +93,57 @@ export async function syncGameToCloudAndLocal(game: GameSaveData): Promise<boole
 
   localStorage.setItem(REGISTRY_KEY, JSON.stringify(updatedRegistry));
 
-  // 3. Sync to Cloud KV store (both game state and global registry)
-  try {
-    // Save specific game data
-    fetch(`https://kv.val.run/set?key=apex_game_${game.id}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(fullData),
-    }).catch(() => {});
+  return true;
+}
 
-    // Save updated registry
-    fetch('https://kv.val.run/set?key=apex_public_games_registry_v1', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updatedRegistry),
-    }).catch(() => {});
+// Rename a game
+export async function renameGameById(gameId: string, newName: string): Promise<boolean> {
+  const cleanId = gameId.trim().toUpperCase();
+  const cleanName = newName.trim();
+  if (!cleanName) return false;
 
+  // Load existing
+  const existing = await loadGameData(cleanId);
+  if (existing) {
+    existing.name = cleanName;
+    existing.updatedAt = Date.now();
+    await syncGameToCloudAndLocal(existing);
     return true;
-  } catch (e) {
-    console.warn('Async cloud sync note:', e);
-    return false;
   }
+
+  // Update registry
+  let localRegistry: GameSummary[] = [];
+  try {
+    const reg = localStorage.getItem(REGISTRY_KEY);
+    if (reg) localRegistry = JSON.parse(reg);
+  } catch {}
+
+  const updated = localRegistry.map(g => g.id === cleanId ? { ...g, name: cleanName, updatedAt: Date.now() } : g);
+  localStorage.setItem(REGISTRY_KEY, JSON.stringify(updated));
+  return true;
 }
 
 // Load a specific game's full data
 export async function loadGameData(gameId: string): Promise<GameSaveData | null> {
   const cleanId = gameId.trim().toUpperCase();
 
-  // Try Cloud first for freshest state
   try {
-    const response = await fetch(`https://kv.val.run/get?key=apex_game_${cleanId}`, {
-      signal: AbortSignal.timeout(3000),
-    });
+    const local = localStorage.getItem(`${LOCAL_GAMES_PREFIX}${cleanId}`);
+    if (local) {
+      return JSON.parse(local);
+    }
+  } catch {}
+
+  // Cloud fallback
+  try {
+    const cloudUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://api.npoint.io/apex_game_${cleanId}`)}`;
+    const response = await fetch(cloudUrl, { signal: AbortSignal.timeout(2000) });
     if (response.ok) {
       const data = await response.json();
       if (data && data.id) {
         localStorage.setItem(`${LOCAL_GAMES_PREFIX}${cleanId}`, JSON.stringify(data));
         return data;
       }
-    }
-  } catch {
-    // Fall back to local
-  }
-
-  // Local fallback
-  try {
-    const local = localStorage.getItem(`${LOCAL_GAMES_PREFIX}${cleanId}`);
-    if (local) {
-      return JSON.parse(local);
     }
   } catch {}
 
@@ -153,7 +154,6 @@ export async function loadGameData(gameId: string): Promise<GameSaveData | null>
 export async function deleteGameById(gameId: string): Promise<boolean> {
   const cleanId = gameId.trim().toUpperCase();
 
-  // Remove locally
   localStorage.removeItem(`${LOCAL_GAMES_PREFIX}${cleanId}`);
 
   let registry: GameSummary[] = [];
@@ -164,15 +164,6 @@ export async function deleteGameById(gameId: string): Promise<boolean> {
 
   const updatedRegistry = registry.filter((g) => g.id !== cleanId);
   localStorage.setItem(REGISTRY_KEY, JSON.stringify(updatedRegistry));
-
-  // Sync delete to Cloud
-  try {
-    fetch('https://kv.val.run/set?key=apex_public_games_registry_v1', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updatedRegistry),
-    }).catch(() => {});
-  } catch {}
 
   return true;
 }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PlusCircle, ArrowUpRight, ArrowDownRight, Layers, Trash2, CheckCircle2, ChevronRight, X, Loader2, Sparkles, ShieldCheck, RefreshCw } from 'lucide-react';
+import { PlusCircle, Trash2, ChevronRight, X, Loader2, RefreshCw, Pencil, Check, FolderKanban } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { formatCurrency, formatPercent } from '../services/marketApi';
 
@@ -14,6 +14,7 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
     isLoadingGames,
     fetchGamesList,
     createGame,
+    renameGame,
     switchGame,
     deleteGame,
   } = useTrading();
@@ -23,6 +24,10 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
   const [selectedCapital, setSelectedCapital] = useState<number>(100000);
   const [gameToDelete, setGameToDelete] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  // Renaming state
+  const [editingGameId, setEditingGameId] = useState<string | null>(null);
+  const [editNameValue, setEditNameValue] = useState<string>('');
 
   const capitalOptions = [10000, 50000, 100000, 500000, 1000000];
 
@@ -40,10 +45,24 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
     }
   };
 
+  const startRenaming = (id: string, currentName: string) => {
+    setEditingGameId(id);
+    setEditNameValue(currentName);
+  };
+
+  const saveRenaming = async (id: string) => {
+    if (editNameValue.trim()) {
+      await renameGame(id, editNameValue.trim());
+    }
+    setEditingGameId(null);
+  };
+
   const handleDeleteConfirm = async (id: string) => {
     await deleteGame(id);
     setGameToDelete(null);
   };
+
+  const canClose = gamesList.length > 0;
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-ios-bg-light dark:bg-ios-bg-dark animate-fadeIn">
@@ -54,7 +73,7 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
             Salas y Partidas
           </h1>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            Sincronizadas en tiempo real en la nube
+            Crea, cambia o renombra tus partidas
           </p>
         </div>
 
@@ -69,13 +88,15 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
             <RefreshCw className={`w-4 h-4 ${isLoadingGames ? 'animate-spin text-ios-blue' : ''}`} />
           </button>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-9 h-9 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 ios-active"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          {canClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-9 h-9 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 ios-active"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -91,7 +112,7 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
           <span>Crear Nueva Partida</span>
         </button>
 
-        {/* Create Modal Sheet */}
+        {/* Create Modal Form */}
         {isCreating && (
           <div className="p-5 bg-white dark:bg-ios-card-dark rounded-3xl border border-black/10 dark:border-white/10 shadow-ios space-y-4 animate-fadeIn">
             <div className="flex items-center justify-between">
@@ -117,7 +138,7 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
                   autoFocus
                   value={newGameName}
                   onChange={(e) => setNewGameName(e.target.value)}
-                  placeholder="Ej: Reto de Trading, Cartera Tech, Cortos 2026..."
+                  placeholder="Ej: Reto $10k, Take Two Only, Cortos..."
                   className="w-full px-3.5 py-2.5 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-sm text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 border border-black/5 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-ios-blue"
                 />
               </div>
@@ -172,15 +193,12 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
             <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">
               Partidas Creadas ({gamesList.length})
             </span>
-            <span className="text-[10px] text-zinc-400 font-medium">
-              Sincronización en vivo
-            </span>
           </div>
 
           {isLoadingGames && gamesList.length === 0 ? (
             <div className="py-16 text-center text-zinc-400 space-y-2">
               <Loader2 className="w-6 h-6 animate-spin mx-auto text-ios-blue" />
-              <p className="text-xs">Cargando partidas sincronizadas...</p>
+              <p className="text-xs">Cargando tus partidas...</p>
             </div>
           ) : gamesList.length > 0 ? (
             <div className="space-y-3">
@@ -189,6 +207,8 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
                 const isProfitable = (game.totalPnL || 0) >= 0;
                 const date = new Date(game.updatedAt);
                 const timeAgo = `${date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric' })} ${date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
+
+                const isEditingThis = editingGameId === game.id;
 
                 return (
                   <div
@@ -199,19 +219,60 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
                         : 'border-black/5 dark:border-white/5 hover:border-black/20 dark:hover:border-white/20'
                     }`}
                   >
-                    {/* Header: Name, Active Badge & Delete */}
+                    {/* Header: Name, Rename & Delete */}
                     <div className="flex items-start justify-between">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-bold text-base text-zinc-900 dark:text-zinc-50">
-                            {game.name}
-                          </h3>
-                          {isActive && (
-                            <span className="px-2 py-0.5 rounded-full bg-ios-blue/15 text-ios-blue text-[10px] font-bold tracking-wider uppercase border border-ios-blue/30">
-                              En Curso
-                            </span>
-                          )}
-                        </div>
+                      <div className="flex-1 mr-2">
+                        {isEditingThis ? (
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <input
+                              type="text"
+                              autoFocus
+                              value={editNameValue}
+                              onChange={(e) => setEditNameValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') saveRenaming(game.id);
+                                if (e.key === 'Escape') setEditingGameId(null);
+                              }}
+                              className="px-2.5 py-1 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-sm font-bold text-zinc-900 dark:text-zinc-50 border border-ios-blue focus:outline-none w-full"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => saveRenaming(game.id)}
+                              className="p-1.5 rounded-xl bg-ios-green text-white text-xs ios-active"
+                              title="Guardar nombre"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingGameId(null)}
+                              className="p-1.5 rounded-xl bg-zinc-200 dark:bg-zinc-700 text-zinc-500 text-xs ios-active"
+                              title="Cancelar"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-bold text-base text-zinc-900 dark:text-zinc-50">
+                              {game.name}
+                            </h3>
+                            <button
+                              type="button"
+                              onClick={() => startRenaming(game.id, game.name)}
+                              className="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 ios-active"
+                              title="Renombrar partida"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            {isActive && (
+                              <span className="px-2 py-0.5 rounded-full bg-ios-blue/15 text-ios-blue text-[10px] font-bold tracking-wider uppercase border border-ios-blue/30">
+                                Activa
+                              </span>
+                            )}
+                          </div>
+                        )}
+
                         <p className="text-[11px] text-zinc-400 font-mono mt-0.5">
                           ID: {game.id} • Actualizado: {timeAgo}
                         </p>
@@ -301,14 +362,24 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
               })}
             </div>
           ) : (
-            <div className="rounded-3xl border border-dashed border-zinc-300 dark:border-zinc-800 p-8 text-center bg-white/50 dark:bg-zinc-900/30">
-              <Layers className="w-8 h-8 text-zinc-400 mx-auto mb-2" />
-              <h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-200">
-                No hay partidas creadas
-              </h3>
-              <p className="text-xs text-zinc-400 mt-1">
-                Crea tu primera partida para empezar a operar.
-              </p>
+            <div className="rounded-3xl border border-dashed border-zinc-300 dark:border-zinc-800 p-8 text-center bg-white/50 dark:bg-zinc-900/30 space-y-3">
+              <FolderKanban className="w-10 h-10 text-zinc-400 mx-auto" />
+              <div>
+                <h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-200">
+                  No hay partidas creadas
+                </h3>
+                <p className="text-xs text-zinc-400 mt-1">
+                  Crea tu primera partida para empezar a operar en el simulador.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCreating(true)}
+                className="py-2.5 px-4 rounded-2xl bg-ios-blue text-white text-xs font-bold shadow-md ios-active inline-flex items-center gap-1.5"
+              >
+                <PlusCircle className="w-4 h-4" />
+                <span>Crear Primera Partida</span>
+              </button>
             </div>
           )}
         </div>

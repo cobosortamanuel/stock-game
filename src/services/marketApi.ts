@@ -2,6 +2,7 @@ import { StockQuote, ChartPoint, TimeRange, SearchResult } from '../types/market
 
 // Pre-configured popular stocks with authentic base data
 export const POPULAR_SYMBOLS = [
+  { symbol: 'TTWO', name: 'Take-Two Interactive Software, Inc.', sector: 'Videojuegos / GTA', basePrice: 172.4 },
   { symbol: 'NVDA', name: 'NVIDIA Corporation', sector: 'Semiconductores', basePrice: 128.5 },
   { symbol: 'AAPL', name: 'Apple Inc.', sector: 'Tecnología', basePrice: 224.2 },
   { symbol: 'TSLA', name: 'Tesla, Inc.', sector: 'Automotriz', basePrice: 214.8 },
@@ -13,6 +14,10 @@ export const POPULAR_SYMBOLS = [
   { symbol: 'PLTR', name: 'Palantir Technologies', sector: 'Inteligencia Artificial', basePrice: 31.4 },
   { symbol: 'BTC-USD', name: 'Bitcoin (USD)', sector: 'Criptomonedas', basePrice: 63850.0 },
   { symbol: 'ETH-USD', name: 'Ethereum (USD)', sector: 'Criptomonedas', basePrice: 2540.0 },
+  { symbol: 'NFLX', name: 'Netflix, Inc.', sector: 'Streaming / Entretenimiento', basePrice: 685.2 },
+  { symbol: 'COIN', name: 'Coinbase Global, Inc.', sector: 'Criptomonedas Exchange', basePrice: 218.6 },
+  { symbol: 'DIS', name: 'The Walt Disney Company', sector: 'Entretenimiento', basePrice: 94.8 },
+  { symbol: 'EA', name: 'Electronic Arts Inc.', sector: 'Videojuegos / Deportes', basePrice: 144.2 },
   { symbol: 'SPY', name: 'SPDR S&P 500 ETF Trust', sector: 'Índices ETF', basePrice: 562.3 },
   { symbol: 'QQQ', name: 'Invesco QQQ Trust (Nasdaq 100)', sector: 'Índices ETF', basePrice: 478.1 },
   { symbol: 'SAN.MC', name: 'Banco Santander S.A.', sector: 'Banca Española', basePrice: 4.45 },
@@ -149,24 +154,21 @@ function generateSyntheticChart(symbol: string, range: TimeRange, currentPrice: 
   return points;
 }
 
-// Fetch Stock Quote and Chart with multi-tier cloud fallbacks
+// Fetch Stock Quote and Chart with fast timeout and failover
 export async function fetchStockData(symbol: string, range: TimeRange = '1D'): Promise<{ quote: StockQuote; chart: ChartPoint[] }> {
   const cleanSymbol = symbol.trim().toUpperCase();
   const { range: apiRange, interval } = getTimeRangeParams(range);
 
-  // Attempt 1: Local / Vercel API proxy
-  // Attempt 2: Public CORS proxy (corsproxy.io / allorigins)
   const targetYahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanSymbol}?range=${apiRange}&interval=${interval}`;
   const fetchUrls = [
     `/api/market/chart/${cleanSymbol}?range=${apiRange}&interval=${interval}`,
-    `https://corsproxy.io/?${encodeURIComponent(targetYahooUrl)}`,
     `https://api.allorigins.win/raw?url=${encodeURIComponent(targetYahooUrl)}`,
   ];
 
   for (const url of fetchUrls) {
     try {
       const response = await fetch(url, {
-        signal: AbortSignal.timeout(3500),
+        signal: AbortSignal.timeout(2200),
       });
       
       if (response.ok) {
@@ -243,7 +245,7 @@ export async function fetchStockData(symbol: string, range: TimeRange = '1D'): P
         }
       }
     } catch {
-      // Try next fallback endpoint
+      // Fast fallback
     }
   }
 
@@ -256,7 +258,7 @@ export async function fetchStockData(symbol: string, range: TimeRange = '1D'): P
 
   const quote: StockQuote = {
     symbol: cleanSymbol,
-    name: popMatch?.name || `${cleanSymbol} Corp.`,
+    name: popMatch?.name || (cleanSymbol === 'TTWO' ? 'Take-Two Interactive Software, Inc.' : `${cleanSymbol} Corporation`),
     price: currentPrice,
     change: changeVal,
     changePercent: Number(simulatedChange.toFixed(2)),
@@ -268,7 +270,7 @@ export async function fetchStockData(symbol: string, range: TimeRange = '1D'): P
     marketCap: '$2.85T',
     currency: cleanSymbol.endsWith('.MC') ? 'EUR' : 'USD',
     exchange: cleanSymbol.endsWith('.MC') ? 'BME' : 'NASDAQ',
-    sector: popMatch?.sector || 'Mercado Global',
+    sector: popMatch?.sector || (cleanSymbol === 'TTWO' ? 'Videojuegos / GTA' : 'Mercado Global'),
     week52High: Number((basePrice * 1.35).toFixed(2)),
     week52Low: Number((basePrice * 0.75).toFixed(2)),
     historicalChanges: {
@@ -290,37 +292,8 @@ export async function searchSymbols(query: string): Promise<SearchResult[]> {
   const cleanQ = query.trim();
   if (!cleanQ) return [];
 
-  const targetYahooSearchUrl = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(cleanQ)}`;
-  const searchUrls = [
-    `/api/market/search?q=${encodeURIComponent(cleanQ)}`,
-    `https://corsproxy.io/?${encodeURIComponent(targetYahooSearchUrl)}`,
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(targetYahooSearchUrl)}`,
-  ];
-
-  for (const url of searchUrls) {
-    try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(3000) });
-      if (response.ok) {
-        const data = await response.json();
-        if (data?.quotes && Array.isArray(data.quotes)) {
-          return data.quotes
-            .filter((q: any) => q.symbol && (q.shortname || q.longname))
-            .map((q: any) => ({
-              symbol: q.symbol,
-              name: q.longname || q.shortname || q.symbol,
-              exchange: q.exchange || q.exchDisp || 'Global',
-              type: q.quoteType || 'EQUITY'
-            }));
-        }
-      }
-    } catch {
-      // Try next
-    }
-  }
-
-  // Local fallback search
   const lowerQ = cleanQ.toLowerCase();
-  return POPULAR_SYMBOLS
+  const matchedPopular = POPULAR_SYMBOLS
     .filter(s => s.symbol.toLowerCase().includes(lowerQ) || s.name.toLowerCase().includes(lowerQ))
     .map(s => ({
       symbol: s.symbol,
@@ -328,4 +301,51 @@ export async function searchSymbols(query: string): Promise<SearchResult[]> {
       exchange: s.symbol.endsWith('.MC') ? 'BME' : 'NASDAQ',
       type: 'EQUITY'
     }));
+
+  // If query is an exact ticker like TTWO, ensure it's first
+  const uppercaseQuery = cleanQ.toUpperCase();
+  if (/^[A-Z0-9.\-]{1,6}$/.test(uppercaseQuery)) {
+    const alreadyFound = matchedPopular.some(m => m.symbol === uppercaseQuery);
+    if (!alreadyFound) {
+      matchedPopular.unshift({
+        symbol: uppercaseQuery,
+        name: uppercaseQuery === 'TTWO' ? 'Take-Two Interactive Software, Inc.' : `${uppercaseQuery} Corporation`,
+        exchange: 'NASDAQ',
+        type: 'EQUITY'
+      });
+    }
+  }
+
+  // Also query live search
+  try {
+    const targetYahooSearchUrl = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(cleanQ)}`;
+    const searchUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetYahooSearchUrl)}`;
+    const response = await fetch(searchUrl, { signal: AbortSignal.timeout(1800) });
+    if (response.ok) {
+      const data = await response.json();
+      if (data?.quotes && Array.isArray(data.quotes)) {
+        const remoteResults = data.quotes
+          .filter((q: any) => q.symbol && (q.shortname || q.longname))
+          .map((q: any) => ({
+            symbol: q.symbol,
+            name: q.longname || q.shortname || q.symbol,
+            exchange: q.exchange || q.exchDisp || 'Global',
+            type: q.quoteType || 'EQUITY'
+          }));
+
+        // Merge without duplicates
+        const map = new Map<string, SearchResult>();
+        [...matchedPopular, ...remoteResults].forEach(item => {
+          if (!map.has(item.symbol)) {
+            map.set(item.symbol, item);
+          }
+        });
+        return Array.from(map.values());
+      }
+    }
+  } catch {
+    // Return local
+  }
+
+  return matchedPopular;
 }

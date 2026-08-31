@@ -1,7 +1,7 @@
-// Service Worker for Apex Trade PWA
-const CACHE_NAME = 'apex-trade-v2';
+// Robust Service Worker for Apex Trade PWA
+const CACHE_NAME = 'apex-trade-v3';
 
-self.addEventListener('install', (event) => {
+self.addEventListener('install', () => {
   self.skipWaiting();
 });
 
@@ -22,8 +22,18 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
-  // Network first fallback to cache
+  
+  const url = new URL(event.request.url);
+  // Do NOT intercept third-party APIs (Yahoo, CORS proxies, cloud sync)
+  if (url.origin !== self.location.origin) {
+    return;
+  }
+
   event.respondWith(
-    fetch(event.request).catch(() => caches.match(event.request))
+    fetch(event.request).catch(async () => {
+      const cached = await caches.match(event.request);
+      if (cached) return cached;
+      return new Response('Offline', { status: 503, statusText: 'Offline' });
+    })
   );
 });

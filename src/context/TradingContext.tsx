@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Position, TradeRecord, PositionType, StockQuote, GameSummary, GameSaveData } from '../types/market';
 import { fetchStockData } from '../services/marketApi';
-import { fetchAllGames, syncGameToCloudAndLocal, loadGameData, deleteGameById, generateGameId } from '../services/gamesHubApi';
+import { fetchAllGames, syncGameToCloudAndLocal, loadGameData, deleteGameById, renameGameById, generateGameId } from '../services/gamesHubApi';
 
 interface TradingContextType {
   // Theme
@@ -18,6 +18,7 @@ interface TradingContextType {
   closeLobby: () => void;
   fetchGamesList: () => Promise<GameSummary[]>;
   createGame: (name: string, startingCapital: number) => Promise<void>;
+  renameGame: (gameId: string, newName: string) => Promise<void>;
   switchGame: (gameId: string) => Promise<void>;
   deleteGame: (gameId: string) => Promise<void>;
 
@@ -70,7 +71,7 @@ const STORAGE_KEYS = {
 };
 
 const DEFAULT_INITIAL_BALANCE = 100000;
-const DEFAULT_WATCHLIST = ['NVDA', 'AAPL', 'TSLA', 'MSFT', 'BTC-USD', 'AMZN', 'GOOGL', 'SPY'];
+const DEFAULT_WATCHLIST = ['TTWO', 'NVDA', 'AAPL', 'TSLA', 'MSFT', 'BTC-USD', 'AMZN', 'GOOGL', 'SPY'];
 
 export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Theme State
@@ -195,6 +196,15 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     await switchGame(id);
   }, [fetchGamesList, switchGame]);
 
+  // Rename a game
+  const renameGame = useCallback(async (gameId: string, newName: string) => {
+    await renameGameById(gameId, newName);
+    if (activeGameId === gameId) {
+      setActiveGameName(newName.trim());
+    }
+    await fetchGamesList();
+  }, [activeGameId, fetchGamesList]);
+
   // Delete a game
   const deleteGame = useCallback(async (gameId: string) => {
     await deleteGameById(gameId);
@@ -203,13 +213,17 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (updatedList.length > 0) {
         await switchGame(updatedList[0].id);
       } else {
-        // If no games left, create default
-        await createGame('Partida Principal', DEFAULT_INITIAL_BALANCE);
+        // If no games left, clear active game
+        setActiveGameId(null);
+        setActiveGameName('Sin Partidas');
+        setPositions([]);
+        setTradeHistory([]);
+        setIsLobbyOpen(true);
       }
     }
-  }, [activeGameId, fetchGamesList, switchGame, createGame]);
+  }, [activeGameId, fetchGamesList, switchGame]);
 
-  // App Initialization: Load games and activate selected or default
+  // App Initialization: Load games and activate selected or open lobby
   useEffect(() => {
     if (hasInitialized.current) return;
     hasInitialized.current = true;
@@ -223,7 +237,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       } else if (list.length > 0) {
         await switchGame(list[0].id);
       } else {
-        // No games created yet, create initial default game
+        // Automatically create initial default game
         await createGame('Partida Principal', DEFAULT_INITIAL_BALANCE);
       }
     };
@@ -236,7 +250,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setIsSyncing(true);
     try {
       const symbolsToFetch = Array.from(
-        new Set([...watchlist, ...positions.map((p) => p.symbol), 'NVDA', 'AAPL', 'TSLA', 'BTC-USD'])
+        new Set([...watchlist, ...positions.map((p) => p.symbol), 'TTWO', 'NVDA', 'AAPL', 'TSLA', 'BTC-USD'])
       );
 
       const quotesMap: Record<string, StockQuote> = { ...liveQuotes };
@@ -393,7 +407,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
   }, [dailyPnL, dailyPnLPercent, totalPnL, totalPnLPercent, totalNetWorth, initialCash]);
 
-  // Auto-sync game to cloud & local whenever state changes
+  // Auto-sync game to storage whenever state changes
   useEffect(() => {
     if (!activeGameId) return;
 
@@ -416,7 +430,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     const timer = setTimeout(() => {
       syncGameToCloudAndLocal(gamePayload);
-    }, 300);
+    }, 150);
 
     return () => clearTimeout(timer);
   }, [activeGameId, activeGameName, initialCash, cashAvailable, cashInvested, totalNetWorth, totalPnL, totalPnLPercent, positions, tradeHistory, watchlist]);
@@ -574,6 +588,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         closeLobby: () => setIsLobbyOpen(false),
         fetchGamesList,
         createGame,
+        renameGame,
         switchGame,
         deleteGame,
         isInstallable,
