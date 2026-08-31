@@ -83,12 +83,12 @@ function generateSyntheticChart(symbol: string, range: TimeRange, currentPrice: 
     case '1H':
       count = 60;
       intervalMs = 60 * 1000;
-      volatility = 0.002;
+      volatility = 0.0025;
       break;
     case '1D':
       count = 78;
       intervalMs = 5 * 60 * 1000;
-      volatility = 0.004;
+      volatility = 0.005;
       break;
     case '1W':
       count = 40;
@@ -117,13 +117,13 @@ function generateSyntheticChart(symbol: string, range: TimeRange, currentPrice: 
       break;
   }
 
-  let seed = symbol.split('').reduce((acc, char) => acc + char.charCodeAt(0), 42);
+  let seed = symbol.split('').reduce((acc, char) => acc + char.charCodeAt(0), range === '1H' ? 99 : 42);
   const pseudoRand = () => {
     seed = (seed * 9301 + 49297) % 233280;
     return seed / 233280;
   };
 
-  let price = currentPrice * (1 - (pseudoRand() - 0.48) * volatility * (count / 5));
+  let price = currentPrice * (1 - (pseudoRand() - 0.48) * volatility * (count / 6));
   if (price <= 0.1) price = currentPrice * 0.8;
 
   for (let i = 0; i < count; i++) {
@@ -136,15 +136,15 @@ function generateSyntheticChart(symbol: string, range: TimeRange, currentPrice: 
     const progress = i / (count - 1);
     const targetPrice = currentPrice;
     const delta = (pseudoRand() - 0.49) * volatility * price;
-    price = (price * (1 - progress) + targetPrice * progress) + delta * (1 - progress * 0.8);
+    price = (price * (1 - progress) + targetPrice * progress) + delta * (1 - progress * 0.7);
     
     if (i === count - 1) {
       price = currentPrice;
     }
 
-    const open = price * (1 + (pseudoRand() - 0.5) * 0.004);
-    const high = Math.max(price, open) * (1 + pseudoRand() * 0.006);
-    const low = Math.min(price, open) * (1 - pseudoRand() * 0.006);
+    const open = price * (1 + (pseudoRand() - 0.5) * 0.002);
+    const high = Math.max(price, open) * (1 + pseudoRand() * 0.003);
+    const low = Math.min(price, open) * (1 - pseudoRand() * 0.003);
 
     points.push({
       timestamp,
@@ -154,14 +154,14 @@ function generateSyntheticChart(symbol: string, range: TimeRange, currentPrice: 
       high: Math.max(0.01, Number(high.toFixed(2))),
       low: Math.max(0.01, Number(low.toFixed(2))),
       close: Math.max(0.01, Number(price.toFixed(2))),
-      volume: Math.floor(pseudoRand() * 500000) + 10000,
+      volume: Math.floor(pseudoRand() * 50000) + 2000,
     });
   }
 
   return points;
 }
 
-// Fetch Stock Quote and Chart with fast timeout and failover
+// Fetch Stock Quote and Chart with fast failover
 export async function fetchStockData(symbol: string, range: TimeRange = '1D'): Promise<{ quote: StockQuote; chart: ChartPoint[] }> {
   const cleanSymbol = symbol.trim().toUpperCase();
   const { range: apiRange, interval } = getTimeRangeParams(range);
@@ -197,7 +197,7 @@ export async function fetchStockData(symbol: string, range: TimeRange = '1D'): P
           const lows: number[] = quotes.low || [];
           const volumes: number[] = quotes.volume || [];
 
-          const chartPoints: ChartPoint[] = [];
+          let chartPoints: ChartPoint[] = [];
           for (let i = 0; i < timestamps.length; i++) {
             const rawClose = closes[i];
             if (rawClose !== null && rawClose !== undefined && !isNaN(rawClose)) {
@@ -220,6 +220,10 @@ export async function fetchStockData(symbol: string, range: TimeRange = '1D'): P
             }
           }
 
+          if (range === '1H' && chartPoints.length > 30) {
+            chartPoints = chartPoints.slice(-30);
+          }
+
           const quote: StockQuote = {
             symbol: cleanSymbol,
             name: meta.longName || meta.shortName || cleanSymbol,
@@ -237,7 +241,7 @@ export async function fetchStockData(symbol: string, range: TimeRange = '1D'): P
             currency: meta.currency || 'USD',
             exchange: meta.exchangeName || 'NASDAQ',
             historicalChanges: {
-              '1H': Number((changePercent * 0.25).toFixed(2)),
+              '1H': Number((changePercent * 0.2).toFixed(2)),
               '1D': Number(changePercent.toFixed(2)),
               '1W': Number(((Math.random() * 8) - 3.5).toFixed(2)),
               '1M': Number(((Math.random() * 16) - 6.5).toFixed(2)),
@@ -282,7 +286,7 @@ export async function fetchStockData(symbol: string, range: TimeRange = '1D'): P
     week52High: Number((basePrice * 1.35).toFixed(2)),
     week52Low: Number((basePrice * 0.75).toFixed(2)),
     historicalChanges: {
-      '1H': Number((simulatedChange * 0.25).toFixed(2)),
+      '1H': Number((simulatedChange * 0.2).toFixed(2)),
       '1D': Number(simulatedChange.toFixed(2)),
       '1W': Number(((Math.random() * 8) - 3.2).toFixed(2)),
       '1M': Number(((Math.random() * 15) - 5).toFixed(2)),
