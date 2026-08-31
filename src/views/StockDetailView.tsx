@@ -210,32 +210,26 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
 
       {/* Fixed Clean Bottom Action Bar for Long and Short with Safe Area Insets */}
       {quote && (
-        <div className="fixed bottom-0 left-0 right-0 z-30 pb-safe pt-3 px-4 ios-glass-bar border-t border-black/10 dark:border-white/15 shadow-ios-sheet">
-          <div className="max-w-md mx-auto grid grid-cols-2 gap-3 mb-2">
+        <div className="fixed bottom-0 left-0 right-0 z-30 pb-safe pt-2.5 px-4 ios-glass-bar border-t border-black/10 dark:border-white/15 shadow-ios-sheet">
+          <div className="max-w-md mx-auto grid grid-cols-2 gap-3 mb-1.5">
             {/* Apostar en Corto */}
             <button
               type="button"
               onClick={() => handleOpenTrade('SHORT')}
-              className="py-3.5 px-3 rounded-2xl bg-ios-orange text-white font-bold text-xs sm:text-sm flex flex-col items-center justify-center gap-0.5 shadow-md ios-active hover:bg-amber-600 active:scale-95 transition-all"
+              className="py-3 px-3 rounded-2xl bg-ios-orange text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-md ios-active hover:bg-amber-600 active:scale-95 transition-all"
             >
-              <div className="flex items-center gap-1.5">
-                <TrendingDown className="w-4 h-4" />
-                <span>Apostar en Corto</span>
-              </div>
-              <span className="text-[10px] text-white/80 font-normal">A la baja</span>
+              <TrendingDown className="w-4 h-4 shrink-0" />
+              <span>Apostar en Corto</span>
             </button>
 
             {/* Apostar a Favor (Largo) */}
             <button
               type="button"
               onClick={() => handleOpenTrade('LONG')}
-              className="py-3.5 px-3 rounded-2xl bg-ios-green text-white font-bold text-xs sm:text-sm flex flex-col items-center justify-center gap-0.5 shadow-md ios-active hover:bg-emerald-600 active:scale-95 transition-all"
+              className="py-3 px-3 rounded-2xl bg-ios-green text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-md ios-active hover:bg-emerald-600 active:scale-95 transition-all"
             >
-              <div className="flex items-center gap-1.5">
-                <TrendingUp className="w-4 h-4" />
-                <span>Apostar a Favor</span>
-              </div>
-              <span className="text-[10px] text-white/80 font-normal">Al alza</span>
+              <TrendingUp className="w-4 h-4 shrink-0" />
+              <span>Apostar a Favor</span>
             </button>
           </div>
         </div>
