@@ -24,6 +24,9 @@ export const POPULAR_SYMBOLS = [
   { symbol: 'ITX.MC', name: 'Industria de Diseño Textil (Inditex)', sector: 'Moda Retail', basePrice: 48.9 },
 ];
 
+// Persistent quote state cache across views
+const quoteMemoryCache: Record<string, StockQuote> = {};
+
 export const formatCurrency = (value: number, currency: string = 'USD', compact: boolean = false): string => {
   if (isNaN(value)) return '$0.00';
   
@@ -100,7 +103,7 @@ function generateSyntheticChart(symbol: string, range: TimeRange, currentPrice: 
       waveFrequency = 5;
       break;
     case '1M':
-      count = 120; // 4 points per day x 30 days = 120 points (high detail)
+      count = 120;
       intervalMs = 6 * 3600 * 1000;
       volatility = 0.022;
       waveFrequency = 7;
@@ -131,7 +134,7 @@ function generateSyntheticChart(symbol: string, range: TimeRange, currentPrice: 
     return seed / 233280;
   };
 
-  // Generate realistic market price trajectory with intraday micro-structure
+  // Generate realistic market price trajectory anchored to currentPrice
   const rawPrices: number[] = [];
   let p = currentPrice * (1 - (pseudoRand() - 0.46) * volatility * 3.8);
   if (p <= 0.1) p = currentPrice * 0.85;
@@ -181,7 +184,7 @@ function generateSyntheticChart(symbol: string, range: TimeRange, currentPrice: 
   return points;
 }
 
-// Fetch Stock Quote and Chart with fast failover
+// Fetch Stock Quote and Chart with solid consistency
 export async function fetchStockData(symbol: string, range: TimeRange = '1D'): Promise<{ quote: StockQuote; chart: ChartPoint[] }> {
   const cleanSymbol = symbol.trim().toUpperCase();
   const { range: apiRange, interval } = getTimeRangeParams(range);
@@ -273,52 +276,58 @@ export async function fetchStockData(symbol: string, range: TimeRange = '1D'): P
             }
           };
 
+          quoteMemoryCache[cleanSymbol] = quote;
+
           if (chartPoints.length > 0) {
             return { quote, chart: chartPoints };
           }
         }
       }
     } catch {
-      // Fast fallback
+      // Fallback
     }
   }
 
-  // Fallback to high-fidelity synthetic data with base price
-  const popMatch = POPULAR_SYMBOLS.find(p => p.symbol.toUpperCase() === cleanSymbol);
-  const basePrice = popMatch ? popMatch.basePrice : 150.0;
-  const simulatedChange = ((Math.random() * 6) - 2.8);
-  const currentPrice = Number((basePrice * (1 + simulatedChange / 100)).toFixed(2));
-  const changeVal = Number((currentPrice - basePrice).toFixed(2));
+  // Consistent Fallback using cached quote if present
+  let quote = quoteMemoryCache[cleanSymbol];
+  if (!quote) {
+    const popMatch = POPULAR_SYMBOLS.find(p => p.symbol.toUpperCase() === cleanSymbol);
+    const basePrice = popMatch ? popMatch.basePrice : 150.0;
+    const simulatedChange = -0.88;
+    const currentPrice = Number((basePrice * (1 + simulatedChange / 100)).toFixed(2));
+    const changeVal = Number((currentPrice - basePrice).toFixed(2));
 
-  const quote: StockQuote = {
-    symbol: cleanSymbol,
-    name: popMatch?.name || (cleanSymbol === 'TTWO' ? 'Take-Two Interactive Software, Inc.' : `${cleanSymbol} Corporation`),
-    price: currentPrice,
-    change: changeVal,
-    changePercent: Number(simulatedChange.toFixed(2)),
-    open: Number((basePrice * 0.995).toFixed(2)),
-    high: Number((Math.max(currentPrice, basePrice) * 1.015).toFixed(2)),
-    low: Number((Math.min(currentPrice, basePrice) * 0.985).toFixed(2)),
-    prevClose: basePrice,
-    volume: '24.5M',
-    marketCap: '$2.85T',
-    currency: cleanSymbol.endsWith('.MC') ? 'EUR' : 'USD',
-    exchange: cleanSymbol.endsWith('.MC') ? 'BME' : 'NASDAQ',
-    sector: popMatch?.sector || (cleanSymbol === 'TTWO' ? 'Videojuegos / GTA' : 'Mercado Global'),
-    week52High: Number((basePrice * 1.35).toFixed(2)),
-    week52Low: Number((basePrice * 0.75).toFixed(2)),
-    historicalChanges: {
-      '1H': Number((simulatedChange * 0.2).toFixed(2)),
-      '1D': Number(simulatedChange.toFixed(2)),
-      '1W': Number(((Math.random() * 8) - 3.2).toFixed(2)),
-      '1M': Number(((Math.random() * 15) - 5).toFixed(2)),
-      '1Y': Number(((Math.random() * 45) + 5).toFixed(2)),
-      '5Y': Number(((Math.random() * 190) + 40).toFixed(2)),
-      'ALL': Number(((Math.random() * 450) + 100).toFixed(2)),
-    }
-  };
+    quote = {
+      symbol: cleanSymbol,
+      name: popMatch?.name || (cleanSymbol === 'TTWO' ? 'Take-Two Interactive Software, Inc.' : `${cleanSymbol} Corporation`),
+      price: currentPrice,
+      change: changeVal,
+      changePercent: Number(simulatedChange.toFixed(2)),
+      open: Number((basePrice * 0.995).toFixed(2)),
+      high: Number((Math.max(currentPrice, basePrice) * 1.015).toFixed(2)),
+      low: Number((Math.min(currentPrice, basePrice) * 0.985).toFixed(2)),
+      prevClose: basePrice,
+      volume: '24.5M',
+      marketCap: '$2.85T',
+      currency: cleanSymbol.endsWith('.MC') ? 'EUR' : 'USD',
+      exchange: cleanSymbol.endsWith('.MC') ? 'BME' : 'NASDAQ',
+      sector: popMatch?.sector || (cleanSymbol === 'TTWO' ? 'Videojuegos / GTA' : 'Mercado Global'),
+      week52High: Number((basePrice * 1.35).toFixed(2)),
+      week52Low: Number((basePrice * 0.75).toFixed(2)),
+      historicalChanges: {
+        '1H': Number((simulatedChange * 0.2).toFixed(2)),
+        '1D': Number(simulatedChange.toFixed(2)),
+        '1W': -2.14,
+        '1M': 4.52,
+        '1Y': 24.8,
+        '5Y': 142.5,
+        'ALL': 350.0,
+      }
+    };
+    quoteMemoryCache[cleanSymbol] = quote;
+  }
 
-  const chart = generateSyntheticChart(cleanSymbol, range, currentPrice);
+  const chart = generateSyntheticChart(cleanSymbol, range, quote.price);
   return { quote, chart };
 }
 

@@ -58,7 +58,7 @@ interface TradingContextType {
   refreshMarketData: () => Promise<void>;
 
   // Actions
-  openPosition: (symbol: string, name: string, amountToInvest: number, type: PositionType) => { success: boolean; message: string };
+  openPosition: (symbol: string, name: string, amountToInvest: number, type: PositionType, executionPrice?: number) => { success: boolean; message: string };
   closePosition: (positionId: string, percentageToClose?: number) => { success: boolean; message: string };
   toggleWatchlist: (symbol: string) => void;
   resetAccount: (newBalance?: number) => void;
@@ -448,7 +448,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     symbol: string,
     name: string,
     amountToInvest: number,
-    type: PositionType
+    type: PositionType,
+    executionPrice?: number
   ): { success: boolean; message: string } => {
     const cleanAmount = Number(amountToInvest);
     if (isNaN(cleanAmount) || cleanAmount <= 0) {
@@ -460,7 +461,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
 
     const currentQuote = liveQuotes[symbol];
-    const currentPrice = currentQuote ? currentQuote.price : 100;
+    const currentPrice = (executionPrice && executionPrice > 0)
+      ? Number(executionPrice.toFixed(2))
+      : (currentQuote ? currentQuote.price : 100);
     const shares = cleanAmount / currentPrice;
 
     const newPosition: Position = {

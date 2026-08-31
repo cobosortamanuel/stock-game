@@ -41,7 +41,7 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 
   const handleExecuteTrade = () => {
     if (!isAffordable) return;
-    const res = openPosition(quote.symbol, quote.name, numAmount, positionType);
+    const res = openPosition(quote.symbol, quote.name, numAmount, positionType, quote.price);
     setFeedback(res);
     if (res.success) {
       setTimeout(() => {
