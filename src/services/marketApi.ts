@@ -75,56 +75,79 @@ function getTimeRangeParams(range: TimeRange): { range: string; interval: string
 function generateSyntheticChart(symbol: string, range: TimeRange, currentPrice: number): ChartPoint[] {
   const points: ChartPoint[] = [];
   const now = Date.now();
-  let count = 50;
+  let count = 60;
   let intervalMs = 5 * 60 * 1000;
   let volatility = 0.008;
+  let waveFrequency = 3;
 
   switch (range) {
     case '1H':
       count = 60;
       intervalMs = 60 * 1000;
-      volatility = 0.0025;
+      volatility = 0.003;
+      waveFrequency = 2;
       break;
     case '1D':
       count = 78;
       intervalMs = 5 * 60 * 1000;
-      volatility = 0.005;
+      volatility = 0.006;
+      waveFrequency = 3.5;
       break;
     case '1W':
-      count = 40;
-      intervalMs = 2 * 3600 * 1000;
-      volatility = 0.012;
+      count = 45;
+      intervalMs = 3 * 3600 * 1000;
+      volatility = 0.015;
+      waveFrequency = 4;
       break;
     case '1M':
-      count = 30;
-      intervalMs = 24 * 3600 * 1000;
-      volatility = 0.025;
+      count = 60;
+      intervalMs = 12 * 3600 * 1000;
+      volatility = 0.028;
+      waveFrequency = 5;
       break;
     case '1Y':
-      count = 52;
-      intervalMs = 7 * 24 * 3600 * 1000;
-      volatility = 0.045;
+      count = 75;
+      intervalMs = 5 * 24 * 3600 * 1000;
+      volatility = 0.055;
+      waveFrequency = 6;
       break;
     case '5Y':
-      count = 60;
-      intervalMs = 30 * 24 * 3600 * 1000;
-      volatility = 0.08;
+      count = 90;
+      intervalMs = 20 * 24 * 3600 * 1000;
+      volatility = 0.09;
+      waveFrequency = 7;
       break;
     case 'ALL':
-      count = 80;
-      intervalMs = 60 * 24 * 3600 * 1000;
-      volatility = 0.15;
+      count = 100;
+      intervalMs = 45 * 24 * 3600 * 1000;
+      volatility = 0.16;
+      waveFrequency = 8;
       break;
   }
 
-  let seed = symbol.split('').reduce((acc, char) => acc + char.charCodeAt(0), range === '1H' ? 99 : 42);
+  let seed = symbol.split('').reduce((acc, char, idx) => acc + char.charCodeAt(0) * (idx + 1) * 17, 31415);
   const pseudoRand = () => {
     seed = (seed * 9301 + 49297) % 233280;
     return seed / 233280;
   };
 
-  let price = currentPrice * (1 - (pseudoRand() - 0.48) * volatility * (count / 6));
-  if (price <= 0.1) price = currentPrice * 0.8;
+  // Generate realistic market price trajectory
+  const rawPrices: number[] = [];
+  let p = currentPrice * (1 - (pseudoRand() - 0.46) * volatility * 3.5);
+  if (p <= 0.1) p = currentPrice * 0.85;
+
+  for (let i = 0; i < count; i++) {
+    const progress = i / (count - 1);
+    const wave = Math.sin(progress * Math.PI * waveFrequency + (seed % 10)) * (volatility * 0.8 * currentPrice);
+    const noise = (pseudoRand() - 0.495) * (volatility * 0.6 * currentPrice);
+    const drift = (currentPrice - p) / (count - i);
+    
+    p = p + drift + wave * 0.25 + noise;
+    if (i === count - 1) {
+      p = currentPrice;
+    }
+    rawPrices.push(Math.max(0.01, p));
+  }
 
   for (let i = 0; i < count; i++) {
     const timestamp = now - (count - 1 - i) * intervalMs;
@@ -132,29 +155,23 @@ function generateSyntheticChart(symbol: string, range: TimeRange, currentPrice: 
     const dateStr = (range === '1H' || range === '1D')
       ? date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
       : date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric', year: range === '5Y' || range === 'ALL' ? '2-digit' : undefined });
-    
-    const progress = i / (count - 1);
-    const targetPrice = currentPrice;
-    const delta = (pseudoRand() - 0.49) * volatility * price;
-    price = (price * (1 - progress) + targetPrice * progress) + delta * (1 - progress * 0.7);
-    
-    if (i === count - 1) {
-      price = currentPrice;
-    }
 
-    const open = price * (1 + (pseudoRand() - 0.5) * 0.002);
-    const high = Math.max(price, open) * (1 + pseudoRand() * 0.003);
-    const low = Math.min(price, open) * (1 - pseudoRand() * 0.003);
+    const price = Number(rawPrices[i].toFixed(2));
+    const noiseHigh = Math.abs(pseudoRand() - 0.5) * volatility * price * 0.4;
+    const noiseLow = Math.abs(pseudoRand() - 0.5) * volatility * price * 0.4;
+    const open = i > 0 ? Number(rawPrices[i - 1].toFixed(2)) : Number((price * 0.998).toFixed(2));
+    const high = Math.max(price, open) + Number(noiseHigh.toFixed(2));
+    const low = Math.max(0.01, Math.min(price, open) - Number(noiseLow.toFixed(2)));
 
     points.push({
       timestamp,
       dateStr,
-      price: Math.max(0.01, Number(price.toFixed(2))),
-      open: Math.max(0.01, Number(open.toFixed(2))),
-      high: Math.max(0.01, Number(high.toFixed(2))),
-      low: Math.max(0.01, Number(low.toFixed(2))),
-      close: Math.max(0.01, Number(price.toFixed(2))),
-      volume: Math.floor(pseudoRand() * 50000) + 2000,
+      price,
+      open,
+      high,
+      low,
+      close: price,
+      volume: Math.floor(pseudoRand() * 250000) + 15000,
     });
   }
 
