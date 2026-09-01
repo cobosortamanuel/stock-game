@@ -27,7 +27,7 @@ export function getAllGamesSync(): GameSummary[] {
     if (local) {
       const parsed: GameSummary[] = JSON.parse(local);
       if (Array.isArray(parsed)) {
-        return parsed.sort((a, b) => b.updatedAt - a.updatedAt);
+        return parsed.sort((a, b) => (b.createdAt || b.updatedAt) - (a.createdAt || a.updatedAt));
       }
     }
   } catch {}
@@ -140,7 +140,7 @@ export async function syncGameToCloudAndLocal(game: GameSaveData): Promise<boole
   const updatedRegistry = [
     summary,
     ...localRegistry.filter((g) => g.id !== game.id),
-  ].sort((a, b) => b.updatedAt - a.updatedAt);
+  ].sort((a, b) => (b.createdAt || b.updatedAt) - (a.createdAt || a.updatedAt));
 
   try {
     localStorage.setItem(REGISTRY_KEY, JSON.stringify(updatedRegistry));

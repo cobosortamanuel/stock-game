@@ -95,7 +95,7 @@ export async function fetchGamesFromSupabase(): Promise<GameSummary[] | null> {
     const { data, error } = await supabase
       .from('games')
       .select('id, name, initial_cash, cash_available, cash_invested, total_net_worth, total_pnl, total_pnl_percent, positions_count, watchlist, created_at, updated_at')
-      .order('updated_at', { ascending: false });
+      .order('created_at', { ascending: false });
 
     if (error || !data) {
       console.warn('Supabase fetch note:', error?.message);

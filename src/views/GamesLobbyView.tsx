@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   PlusCircle,
   Trash2,
@@ -54,6 +54,18 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
   const [pinInput, setPinInput] = useState<string>('');
   const [pinError, setPinError] = useState<string | null>(null);
   const [pendingActionAfterUnlock, setPendingActionAfterUnlock] = useState<'enter' | 'delete' | null>(null);
+
+  // Stable sort: Active game pinned to top, remaining sorted stably by createdAt (no flickering/jumping)
+  const sortedGames = useMemo(() => {
+    return [...gamesList].sort((a, b) => {
+      if (a.id === activeGameId) return -1;
+      if (b.id === activeGameId) return 1;
+      const timeA = a.createdAt || a.updatedAt || 0;
+      const timeB = b.createdAt || b.updatedAt || 0;
+      if (timeB !== timeA) return timeB - timeA;
+      return a.id.localeCompare(b.id);
+    });
+  }, [gamesList, activeGameId]);
 
   // Realtime subscription (debounced)
   useEffect(() => {
@@ -357,9 +369,9 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
               <Loader2 className="w-6 h-6 animate-spin mx-auto text-ios-blue" />
               <p className="text-xs">Cargando tus partidas...</p>
             </div>
-          ) : gamesList.length > 0 ? (
+          ) : sortedGames.length > 0 ? (
             <div className="space-y-3">
-              {gamesList.map((game) => {
+              {sortedGames.map((game) => {
                 const isActive = game.id === activeGameId;
                 const isProfitable = (game.totalPnL || 0) >= 0;
                 const isPriv = game.isPrivate ?? true;

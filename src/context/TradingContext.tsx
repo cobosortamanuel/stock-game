@@ -590,7 +590,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         clearTimeout(syncDebounceTimerRef.current);
       }
     };
-  }, [activeGameId, activeGameName, createdAt, isCurrentGamePrivate, currentGamePin, initialCash, cashAvailable, cashInvested, totalNetWorth, totalPnL, totalPnLPercent, positions, tradeHistory, watchlist, gamesList]);
+  }, [activeGameId, activeGameName, createdAt, isCurrentGamePrivate, currentGamePin, initialCash, cashAvailable, cashInvested, totalNetWorth, totalPnL, totalPnLPercent, positions, tradeHistory, watchlist]);
 
   // Trade Execution: Open Position
   const openPosition = (
