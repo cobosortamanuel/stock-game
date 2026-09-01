@@ -36,19 +36,19 @@ export const HistoryView: React.FC = () => {
           </div>
 
           {/* Realized P&L */}
-          <div className="p-3 bg-zinc-100 dark:bg-zinc-800/60 rounded-2xl">
-            <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 font-medium">
-              <History className="w-3.5 h-3.5 text-ios-green" />
-              <span>Beneficio Cerrado</span>
+          <div className="p-3 bg-zinc-100 dark:bg-zinc-800/60 rounded-2xl min-w-0">
+            <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 font-medium truncate">
+              <History className="w-3.5 h-3.5 text-ios-green shrink-0" />
+              <span className="truncate">Beneficio Cerrado</span>
             </div>
             <div
-              className={`text-xl font-bold font-mono mt-1 ${
+              className={`text-base sm:text-xl font-bold font-mono mt-1 truncate ${
                 totalRealizedPnL >= 0 ? 'text-ios-green' : 'text-ios-red'
               }`}
             >
               {totalRealizedPnL >= 0 ? '+' : ''}{formatCurrency(totalRealizedPnL)}
             </div>
-            <div className="text-[10px] text-zinc-400 mt-0.5">
+            <div className="text-[10px] text-zinc-400 mt-0.5 truncate">
               {closedTrades.length} operaciones cerradas
             </div>
           </div>

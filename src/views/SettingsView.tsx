@@ -162,10 +162,10 @@ export const SettingsView: React.FC = () => {
               </button>
             </form>
           ) : (
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-base font-bold text-zinc-900 dark:text-zinc-50">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-sm sm:text-base font-bold text-zinc-900 dark:text-zinc-50 truncate">
                     {activeGameName}
                   </span>
 
@@ -173,32 +173,34 @@ export const SettingsView: React.FC = () => {
                     <button
                       type="button"
                       onClick={startRenaming}
-                      className="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 ios-active"
+                      className="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 ios-active shrink-0"
                       title="Cambiar nombre de la partida"
                     >
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
                   )}
+                </div>
 
+                <div className="flex items-center gap-2 mt-1">
                   {isCurrentGamePrivate ? (
-                    <span className="px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-[10px] font-bold flex items-center gap-0.5">
+                    <span className="px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-[10px] font-bold flex items-center gap-0.5 shrink-0">
                       <Lock className="w-2.5 h-2.5 text-zinc-500" /> Privada
                     </span>
                   ) : (
-                    <span className="px-1.5 py-0.5 rounded bg-ios-blue/15 text-ios-blue text-[10px] font-bold flex items-center gap-0.5">
+                    <span className="px-1.5 py-0.5 rounded bg-ios-blue/15 text-ios-blue text-[10px] font-bold flex items-center gap-0.5 shrink-0">
                       <Globe className="w-2.5 h-2.5" /> Pública
                     </span>
                   )}
+                  <span className="text-[11px] font-mono text-zinc-400 truncate">
+                    ID: {activeGameId}
+                  </span>
                 </div>
-                <span className="text-[11px] font-mono text-zinc-400 block mt-0.5">
-                  ID: {activeGameId}
-                </span>
               </div>
 
               <button
                 type="button"
                 onClick={openLobby}
-                className="py-2 px-3.5 rounded-xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-bold shadow-sm ios-active flex items-center gap-1.5 shrink-0"
+                className="py-2 px-3 rounded-xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-bold shadow-sm ios-active flex items-center gap-1.5 shrink-0"
               >
                 <FolderKanban className="w-3.5 h-3.5 text-ios-blue" />
                 <span>Ver Partidas</span>

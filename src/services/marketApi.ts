@@ -389,13 +389,7 @@ export const formatCurrency = (
     return `$${(value / 1_000).toFixed(1)}k`;
   }
 
-  const fractionDigits = noDecimals
-    ? 0
-    : Math.abs(value) < 0.01
-    ? 6
-    : Math.abs(value) < 1
-    ? 4
-    : 2;
+  const fractionDigits = noDecimals ? 0 : 2;
 
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
