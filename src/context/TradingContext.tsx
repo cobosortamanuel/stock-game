@@ -171,7 +171,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Active Game In-Memory State (Initialized directly with saved game)
   const [createdAt, setCreatedAt] = useState<number>(() => initialGameData?.createdAt || Date.now());
-  const [isCurrentGamePrivate, setIsCurrentGamePrivate] = useState<boolean>(() => initialGameData?.isPrivate ?? true);
+  const [isCurrentGamePrivate, setIsCurrentGamePrivate] = useState<boolean>(() => initialGameData?.isPrivate ?? false);
   const [currentGamePin, setCurrentGamePin] = useState<string | undefined>(() => initialGameData?.pinCode);
   const [unlockedStateNonce, setUnlockedStateNonce] = useState<number>(0);
   const [initialCash, setInitialCash] = useState<number>(() => initialGameData?.initialCash ?? DEFAULT_INITIAL_BALANCE);
@@ -226,7 +226,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (data) {
       setActiveGameId(data.id);
       setActiveGameName(data.name);
-      setIsCurrentGamePrivate(data.isPrivate ?? true);
+      setIsCurrentGamePrivate(data.isPrivate ?? false);
       setCurrentGamePin(data.pinCode);
       setCreatedAt(data.createdAt || Date.now());
       setInitialCash(data.initialCash);
@@ -374,7 +374,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (latestData) {
           isReceivingRemoteUpdateRef.current = true;
           setActiveGameName(latestData.name);
-          setIsCurrentGamePrivate(latestData.isPrivate ?? true);
+          setIsCurrentGamePrivate(latestData.isPrivate ?? false);
           setCurrentGamePin(latestData.pinCode);
           setCreatedAt(latestData.createdAt || Date.now());
           setInitialCash(latestData.initialCash);

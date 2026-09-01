@@ -62,7 +62,7 @@ export function extractPrivacyAndPin(watchlist: string[] | undefined): { isPriva
   const list = watchlist || [];
   const secTag = list.find((s) => typeof s === 'string' && s.startsWith('__SEC:'));
   if (!secTag) {
-    return { isPrivate: true, pinCode: undefined, cleanWatchlist: list.filter((s) => typeof s === 'string' && !s.startsWith('__SEC:')) };
+    return { isPrivate: false, pinCode: undefined, cleanWatchlist: list.filter((s) => typeof s === 'string' && !s.startsWith('__SEC:')) };
   }
   const isPrivate = !secTag.includes('PUB');
   let pinCode: string | undefined = undefined;

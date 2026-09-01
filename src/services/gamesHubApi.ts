@@ -85,6 +85,7 @@ export function markGameUnlockedLocally(gameId: string): void {
 
 export function isGameUnlocked(game: { id: string; isPrivate?: boolean; pinCode?: string }): boolean {
   if (!game.isPrivate) return true;
+  if (!game.pinCode) return true;
   const cleanId = game.id.trim().toUpperCase();
   const unlocked = getUnlockedGames();
   return !!unlocked[cleanId];
