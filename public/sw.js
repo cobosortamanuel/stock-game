@@ -1,5 +1,5 @@
-// Apex Trade PWA Service Worker
-const CACHE_NAME = 'apex-trade-v4';
+// Stock Game PWA Service Worker
+const CACHE_NAME = 'stock-game-v5';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

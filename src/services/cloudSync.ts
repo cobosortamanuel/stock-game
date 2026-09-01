@@ -1,4 +1,4 @@
-// Cloud Save & Synchronization Service for Apex Trade
+// Cloud Save & Synchronization Service for Stock Game
 
 export interface CloudSaveData {
   saveId: string;

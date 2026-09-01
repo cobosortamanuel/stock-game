@@ -1,7 +1,7 @@
 {
-  "id": "apex-trade-app",
-  "short_name": "Apex Trade",
-  "name": "Apex Trade - Simulador de Mercados",
+  "id": "stock-game-app",
+  "short_name": "Stock Game",
+  "name": "Stock Game - Simulador de Mercados",
   "description": "Simulador de trading en tiempo real con datos de mercado y dinero ficticio.",
   "icons": [
     {

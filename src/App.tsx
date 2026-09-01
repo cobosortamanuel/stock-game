@@ -42,7 +42,7 @@ function AppContent() {
       case 'settings':
         return 'Ajustes';
       default:
-        return 'Apex Trade';
+        return 'Stock Game';
     }
   };
 

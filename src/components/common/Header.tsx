@@ -9,7 +9,7 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  title = 'Apex Trade',
+  title = 'Stock Game',
   subtitle,
   onOpenSearch,
 }) => {
