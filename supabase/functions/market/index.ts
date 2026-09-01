@@ -12,6 +12,34 @@ Deno.serve(async (req: Request) => {
 
   try {
     const url = new URL(req.url);
+    const searchQuery = url.searchParams.get('q');
+
+    // 1. Global Stock Search Mode
+    if (searchQuery) {
+      const targetSearchUrl = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(searchQuery)}`;
+      const response = await fetch(targetSearchUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+      });
+
+      if (!response.ok) {
+        return new Response(
+          JSON.stringify({ error: `Yahoo Search returned HTTP ${response.status}` }),
+          { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const data = await response.json();
+      return new Response(JSON.stringify(data), {
+        status: 200,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+          'Cache-Control': 'public, max-age=60',
+        },
+      });
+    }
+
+    // 2. Chart & Quotes Data Mode
     const symbol = url.searchParams.get('symbol') || 'TTWO';
     const range = url.searchParams.get('range') || '1d';
     const interval = url.searchParams.get('interval') || '5m';

@@ -19,13 +19,14 @@ export const POPULAR_SYMBOLS = [
   { symbol: 'INTC', name: 'Intel Corporation', sector: 'Semiconductores', category: 'TECH', basePrice: 20.80 },
   { symbol: 'TSM', name: 'Taiwan Semiconductor Manufacturing', sector: 'Fundición de Chips', category: 'TECH', basePrice: 172.10 },
 
-  // --- Criptomonedas (24 Horas / 7 Días) ---
-  { symbol: 'BTC-USD', name: 'Bitcoin (USD)', sector: 'Criptomoneda Lider', category: 'CRYPTO', basePrice: 78626.00 },
+  // --- Criptomonedas & Memecoins (24 Horas / 7 Días) ---
+  { symbol: 'BTC-USD', name: 'Bitcoin (USD)', sector: 'Criptomoneda Líder', category: 'CRYPTO', basePrice: 78626.00 },
   { symbol: 'ETH-USD', name: 'Ethereum (USD)', sector: 'Smart Contracts', category: 'CRYPTO', basePrice: 2540.00 },
-  { symbol: 'SOL-USD', name: 'Solana (USD)', sector: 'Blockchain de Alta Velocidad', category: 'CRYPTO', basePrice: 138.50 },
+  { symbol: 'SOL-USD', name: 'Solana (USD)', sector: 'Blockchain Alta Velocidad', category: 'CRYPTO', basePrice: 138.50 },
   { symbol: 'BNB-USD', name: 'Binance Coin (USD)', sector: 'Ecosistema Binance', category: 'CRYPTO', basePrice: 542.00 },
   { symbol: 'XRP-USD', name: 'Ripple XRP (USD)', sector: 'Pagos Transfronterizos', category: 'CRYPTO', basePrice: 0.58 },
   { symbol: 'DOGE-USD', name: 'Dogecoin (USD)', sector: 'Memecoin de Red', category: 'CRYPTO', basePrice: 0.10 },
+  { symbol: 'CYBERLEEK-USD', name: 'CyberLeek USD', sector: 'Memecoin Comunitaria', category: 'CRYPTO', basePrice: 0.0028 },
   { symbol: 'COIN', name: 'Coinbase Global, Inc.', sector: 'Crypto Exchange', category: 'CRYPTO', basePrice: 218.60 },
 
   // --- Automotriz & Movilidad ---
@@ -76,11 +77,13 @@ export const formatCurrency = (value: number, currency: string = 'USD', compact:
     return `$${(value / 1_000).toFixed(1)}k`;
   }
 
+  const fractionDigits = Math.abs(value) < 0.01 ? 6 : Math.abs(value) < 1 ? 4 : 2;
+
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: currency === 'EUR' ? 'EUR' : 'USD',
-    minimumFractionDigits: Math.abs(value) < 1 ? 4 : 2,
-    maximumFractionDigits: Math.abs(value) < 1 ? 4 : 2,
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
   }).format(value);
 };
 
@@ -91,7 +94,7 @@ export const formatPercent = (value: number, includeSign: boolean = true): strin
 };
 
 function getTimeRangeParams(range: TimeRange, symbol: string): { range: string; interval: string } {
-  const isCrypto = symbol.includes('BTC') || symbol.includes('ETH') || symbol.includes('USD');
+  const isCrypto = symbol.includes('BTC') || symbol.includes('ETH') || symbol.includes('USD') || symbol.includes('CYBERLEEK');
   switch (range) {
     case '1H':
       return { range: '1d', interval: '2m' };
@@ -118,7 +121,7 @@ export async function fetchStockData(
   range: TimeRange = '1D'
 ): Promise<{ quote: StockQuote; chart: ChartPoint[] } | null> {
   const cleanSymbol = symbol.trim().toUpperCase();
-  const isCrypto = cleanSymbol.includes('BTC') || cleanSymbol.includes('ETH') || cleanSymbol.includes('USD');
+  const isCrypto = cleanSymbol.includes('BTC') || cleanSymbol.includes('ETH') || cleanSymbol.includes('USD') || cleanSymbol.includes('CYBERLEEK');
   const { range: apiRange, interval } = getTimeRangeParams(range, cleanSymbol);
 
   const supabaseFunctionUrl = `${SUPABASE_PROJECT_URL}/functions/v1/market?symbol=${encodeURIComponent(cleanSymbol)}&range=${apiRange}&interval=${interval}`;
@@ -179,14 +182,16 @@ export async function fetchStockData(
                   ? date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
                   : date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric', year: range === '5Y' || range === 'ALL' ? '2-digit' : undefined });
 
+              const precision = currentPrice < 0.01 ? 6 : currentPrice < 1 ? 4 : 2;
+
               chartPoints.push({
                 timestamp: ts,
                 dateStr,
-                price: Number(rawClose.toFixed(2)),
-                open: opens[i] ? Number(opens[i].toFixed(2)) : Number(rawClose.toFixed(2)),
-                high: highs[i] ? Number(highs[i].toFixed(2)) : Number(rawClose.toFixed(2)),
-                low: lows[i] ? Number(lows[i].toFixed(2)) : Number(rawClose.toFixed(2)),
-                close: Number(rawClose.toFixed(2)),
+                price: Number(rawClose.toFixed(precision)),
+                open: opens[i] ? Number(opens[i].toFixed(precision)) : Number(rawClose.toFixed(precision)),
+                high: highs[i] ? Number(highs[i].toFixed(precision)) : Number(rawClose.toFixed(precision)),
+                low: lows[i] ? Number(lows[i].toFixed(precision)) : Number(rawClose.toFixed(precision)),
+                close: Number(rawClose.toFixed(precision)),
                 volume: volumes[i] || 0,
               });
             }
@@ -198,16 +203,18 @@ export async function fetchStockData(
             chartPoints = chartPoints.slice(-288);
           }
 
+          const precision = currentPrice < 0.01 ? 6 : currentPrice < 1 ? 4 : 2;
+
           const quote: StockQuote = {
             symbol: cleanSymbol,
             name: meta.longName || meta.shortName || cleanSymbol,
-            price: Number(currentPrice.toFixed(2)),
-            change: Number(change.toFixed(2)),
+            price: Number(currentPrice.toFixed(precision)),
+            change: Number(change.toFixed(precision)),
             changePercent: Number(changePercent.toFixed(2)),
             open: meta.regularMarketOpen ?? currentPrice,
             high: meta.regularMarketDayHigh ?? currentPrice,
             low: meta.regularMarketDayLow ?? currentPrice,
-            prevClose: Number(prevClose.toFixed(2)),
+            prevClose: Number(prevClose.toFixed(precision)),
             volume: meta.regularMarketVolume ? meta.regularMarketVolume.toLocaleString() : 'N/A',
             marketCap: meta.marketCap ? formatCurrency(meta.marketCap, 'USD', true) : 'N/A',
             week52High: meta.fiftyTwoWeekHigh,
@@ -255,18 +262,61 @@ export async function searchSymbols(query: string): Promise<SearchResult[]> {
     }));
 
   const uppercaseQuery = cleanQ.toUpperCase();
-  if (/^[A-Z0-9.\-]{1,8}$/.test(uppercaseQuery)) {
-    const alreadyFound = matchedPopular.some(m => m.symbol === uppercaseQuery);
-    if (!alreadyFound) {
+
+  // If user searched a ticker or potential crypto symbol, include exact candidates
+  if (/^[A-Z0-9.\-]{1,15}$/.test(uppercaseQuery)) {
+    const hasMatch = matchedPopular.some(m => m.symbol === uppercaseQuery || m.symbol === `${uppercaseQuery}-USD`);
+    if (!hasMatch) {
+      matchedPopular.unshift({
+        symbol: uppercaseQuery.includes('-') ? uppercaseQuery : `${uppercaseQuery}-USD`,
+        name: `${uppercaseQuery} (Crypto / Ticker)`,
+        exchange: 'CRYPTO',
+        type: 'CRYPTOCURRENCY'
+      });
       matchedPopular.unshift({
         symbol: uppercaseQuery,
-        name: `${uppercaseQuery} Market Asset`,
+        name: `${uppercaseQuery} (Stock)`,
         exchange: uppercaseQuery.endsWith('.MC') ? 'BME' : 'NASDAQ',
         type: 'EQUITY'
       });
     }
   }
 
+  // 1. Try Supabase Edge Function search
+  try {
+    const supabaseSearchUrl = `${SUPABASE_PROJECT_URL}/functions/v1/market?q=${encodeURIComponent(cleanQ)}`;
+    const res = await fetch(supabaseSearchUrl, {
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+      signal: AbortSignal.timeout(3000),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.quotes && Array.isArray(data.quotes)) {
+        const remoteResults = data.quotes
+          .filter((q: any) => q.symbol && (q.shortname || q.longname))
+          .map((q: any) => ({
+            symbol: q.symbol,
+            name: q.longname || q.shortname || q.symbol,
+            exchange: q.exchange || q.exchDisp || 'Global',
+            type: q.quoteType || 'EQUITY'
+          }));
+
+        const map = new Map<string, SearchResult>();
+        [...matchedPopular, ...remoteResults].forEach(item => {
+          if (!map.has(item.symbol)) {
+            map.set(item.symbol, item);
+          }
+        });
+        return Array.from(map.values());
+      }
+    }
+  } catch {}
+
+  // 2. Fallback to AllOrigins proxy
   try {
     const targetYahooSearchUrl = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(cleanQ)}`;
     const searchUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetYahooSearchUrl)}`;
