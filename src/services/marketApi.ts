@@ -65,7 +65,7 @@ export const MARKET_CATEGORIES = [
   { id: 'ALL', label: 'Todo' },
   { id: 'GAMING', label: 'Videojuegos' },
   { id: 'TECH', label: 'Tecnología e IA' },
-  { id: 'CRYPTO', label: 'Criptomonedas (24/7)' },
+  { id: 'CRYPTO', label: 'Criptomonedas' },
   { id: 'AUTO', label: 'Automotriz' },
   { id: 'MEDIA', label: 'Streaming y Cine' },
   { id: 'CONSUMER', label: 'Consumo y Moda' },
