@@ -99,7 +99,7 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
               Dinero Base
             </span>
             <span className="text-xs sm:text-sm font-bold font-mono text-zinc-800 dark:text-zinc-200 block mt-0.5">
-              {formatCurrency(initialCash, 'USD', true)}
+              {formatCurrency(initialCash, 'USD', false, true)}
             </span>
           </div>
 
@@ -109,7 +109,7 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
               Apostado
             </span>
             <span className="text-xs sm:text-sm font-bold font-mono text-ios-orange block mt-0.5">
-              {formatCurrency(cashInvested, 'USD', true)}
+              {formatCurrency(cashInvested, 'USD', false, true)}
             </span>
           </div>
 
@@ -119,7 +119,7 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
               Disponible
             </span>
             <span className="text-xs sm:text-sm font-bold font-mono text-ios-green block mt-0.5">
-              {formatCurrency(cashAvailable, 'USD', true)}
+              {formatCurrency(cashAvailable, 'USD', false, true)}
             </span>
           </div>
         </div>

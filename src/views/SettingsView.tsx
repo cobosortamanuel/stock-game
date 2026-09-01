@@ -432,13 +432,13 @@ export const SettingsView: React.FC = () => {
         </h2>
 
         <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4">
-          Si tus operaciones no han salido bien, puedes reiniciar tu cuenta en cualquier momento para volver a empezar con los <strong>10.000 €</strong> iniciales.
+          Si tus operaciones no han salido bien, puedes reiniciar tu cuenta en cualquier momento para volver a empezar con los <strong>{formatCurrency(10000, 'USD', false, true)}</strong> iniciales.
         </p>
 
         {isResetConfirming ? (
           <div className="p-3.5 bg-red-500/10 border border-red-500/30 rounded-2xl space-y-2.5">
             <span className="text-xs font-medium text-ios-red block">
-              ¿Seguro? Se borrarán todas las posiciones y el historial para reiniciar con {formatCurrency(10000)}.
+              ¿Seguro? Se borrarán todas las posiciones y el historial para reiniciar con {formatCurrency(10000, 'USD', false, true)}.
             </span>
             <div className="flex gap-2">
               <button
@@ -464,13 +464,13 @@ export const SettingsView: React.FC = () => {
             className="w-full py-3 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 text-xs font-bold flex items-center justify-center gap-2 ios-active hover:bg-zinc-200 dark:hover:bg-zinc-700"
           >
             <RotateCcw className="w-4 h-4" />
-            Reiniciar Cartera con {formatCurrency(10000)}
+            Reiniciar Cartera con {formatCurrency(10000, 'USD', false, true)}
           </button>
         )}
 
         {resetSuccess && (
           <div className="mt-2 p-2 bg-ios-green/15 text-ios-green text-xs font-semibold rounded-xl text-center">
-            Cartera reiniciada con 10.000 € con éxito.
+            Cartera reiniciada con {formatCurrency(10000, 'USD', false, true)} con éxito.
           </div>
         )}
       </div>

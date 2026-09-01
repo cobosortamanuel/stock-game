@@ -139,7 +139,7 @@ export const PositionCard: React.FC<PositionCardProps> = ({
 
         <div className="text-right">
           <span className="text-[10px] text-zinc-400 uppercase tracking-wider block font-medium">
-            Precio Entrada
+            Entrada
           </span>
           <span className="text-xs sm:text-sm font-mono text-zinc-600 dark:text-zinc-400">
             {formatCurrency(position.entryPrice)}
@@ -168,7 +168,6 @@ export const PositionCard: React.FC<PositionCardProps> = ({
 
         {/* Timeframe specific return */}
         <div className="text-[11px] font-mono font-medium">
-          <span className="text-zinc-400 text-[10px] mr-1">{selectedTimeframe}:</span>
           <span className={isTfProfitable ? 'text-ios-green font-semibold' : 'text-ios-red font-semibold'}>
             {isTfProfitable ? '+' : ''}{formatCurrency(currentTfPnL.amount)} ({formatPercent(currentTfPnL.percent)})
           </span>

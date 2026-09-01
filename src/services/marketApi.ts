@@ -371,24 +371,35 @@ export function mapYahooToCategory(item: { sector?: string; industry?: string; t
 const SUPABASE_PROJECT_URL = 'https://vvxfewktdsltzsxfumio.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_RXWhW8Lu_vIehqKQJAPsQw_GkvczmaZ';
 
-export const formatCurrency = (value: number, currency: string = 'EUR', compact: boolean = false): string => {
-  if (isNaN(value)) return '0,00 €';
+export const formatCurrency = (
+  value: number,
+  currency: string = 'USD',
+  compact: boolean = false,
+  noDecimals: boolean = false
+): string => {
+  if (isNaN(value)) return '$0.00';
   
   if (compact && Math.abs(value) >= 1_000_000_000) {
-    return `${(value / 1_000_000_000).toFixed(2)}B €`;
+    return `$${(value / 1_000_000_000).toFixed(2)}B`;
   }
   if (compact && Math.abs(value) >= 1_000_000) {
-    return `${(value / 1_000_000).toFixed(2)}M €`;
+    return `$${(value / 1_000_000).toFixed(2)}M`;
   }
   if (compact && Math.abs(value) >= 100_000) {
-    return `${(value / 1_000).toFixed(1)}k €`;
+    return `$${(value / 1_000).toFixed(1)}k`;
   }
 
-  const fractionDigits = Math.abs(value) < 0.01 ? 6 : Math.abs(value) < 1 ? 4 : 2;
+  const fractionDigits = noDecimals
+    ? 0
+    : Math.abs(value) < 0.01
+    ? 6
+    : Math.abs(value) < 1
+    ? 4
+    : 2;
 
-  return new Intl.NumberFormat('es-ES', {
+  return new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency: currency === 'USD' ? 'USD' : 'EUR',
+    currency: 'USD',
     minimumFractionDigits: fractionDigits,
     maximumFractionDigits: fractionDigits,
   }).format(value);

@@ -213,7 +213,7 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
                 <div className="grid grid-cols-2 gap-2 pt-2 border-t border-black/5 dark:border-white/5 text-xs">
                   <div className="p-2.5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50">
                     <span className="text-[10px] text-zinc-400 uppercase font-medium block">
-                      Precio de Entrada
+                      Entrada
                     </span>
                     <span className="font-mono font-bold text-zinc-900 dark:text-zinc-100">
                       {formatCurrency(pos.entryPrice)}

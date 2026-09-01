@@ -71,7 +71,7 @@ const StockItemCard = React.memo<{
           className="text-right"
         >
           <div className="font-mono font-bold text-sm text-zinc-900 dark:text-zinc-50 whitespace-nowrap">
-            {formatCurrency(price, item.symbol.endsWith('.MC') ? 'EUR' : 'USD')}
+            {formatCurrency(price)}
           </div>
           <div
             className={`inline-flex items-center justify-end font-mono font-semibold text-xs whitespace-nowrap ${

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Position, TradeRecord, PositionType, StockQuote, GameSummary, GameSaveData } from '../types/market';
-import { fetchStockData, fetchBatchQuotes, POPULAR_SYMBOLS } from '../services/marketApi';
+import { fetchStockData, fetchBatchQuotes, POPULAR_SYMBOLS, formatCurrency } from '../services/marketApi';
 import {
   fetchAllGames,
   syncGameToCloudAndLocal,
@@ -610,7 +610,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
 
     if (cleanAmount > cashAvailable) {
-      return { success: false, message: `Fondos insuficientes. Tienes disponible ${cashAvailable.toLocaleString('es-ES', { minimumFractionDigits: 2 })} €` };
+      return { success: false, message: `Fondos insuficientes. Tienes disponible ${formatCurrency(cashAvailable)}` };
     }
 
     const currentQuote = liveQuotes[symbol];
@@ -652,7 +652,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     return {
       success: true,
-      message: `Posición ${type === 'LONG' ? 'en Largo (A favor)' : 'en Corto (A la baja)'} abierta con ${cleanAmount.toLocaleString('es-ES', { minimumFractionDigits: 2 })} €.`
+      message: `Posición ${type === 'LONG' ? 'en Largo (A favor)' : 'en Corto (A la baja)'} abierta con ${formatCurrency(cleanAmount)}.`
     };
   };
 
@@ -718,7 +718,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     return {
       success: true,
-      message: `Posición cerrada. ${realizedPnL >= 0 ? 'Ganancia' : 'Pérdida'}: ${realizedPnL >= 0 ? '+' : ''}${realizedPnL.toFixed(2)} € (${realizedPnLPercent.toFixed(2)}%)`
+      message: `Posición cerrada. ${realizedPnL >= 0 ? 'Ganancia' : 'Pérdida'}: ${realizedPnL >= 0 ? '+' : ''}${formatCurrency(realizedPnL)} (${realizedPnLPercent.toFixed(2)}%)`
     };
   };
 
