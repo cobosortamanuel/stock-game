@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Search, X, TrendingUp, Sparkles, Building2, ChevronRight, Loader2 } from 'lucide-react';
-import { searchSymbols, POPULAR_SYMBOLS } from '../../services/marketApi';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Search, X, ChevronRight, Loader2 } from 'lucide-react';
+import { searchSymbols, POPULAR_SYMBOLS, MARKET_CATEGORIES, mapYahooToCategory } from '../../services/marketApi';
 import { SearchResult } from '../../types/market';
 
 interface SearchModalProps {
@@ -16,12 +16,14 @@ export const SearchModal: React.FC<SearchModalProps> = ({
 }) => {
   const [query, setQuery] = useState<string>('');
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   useEffect(() => {
     if (!isOpen) {
       setQuery('');
       setResults([]);
+      setSelectedCategory('ALL');
       return;
     }
   }, [isOpen]);
@@ -48,12 +50,26 @@ export const SearchModal: React.FC<SearchModalProps> = ({
     return () => clearTimeout(timer);
   }, [query]);
 
+  // Filtered active list (either from search query or default catalog)
+  const displayedItems = useMemo(() => {
+    const sourceList = query.trim() ? results : POPULAR_SYMBOLS;
+
+    if (selectedCategory === 'ALL') {
+      return sourceList;
+    }
+
+    return sourceList.filter((item: any) => {
+      const cat = item.category || mapYahooToCategory(item);
+      return cat === selectedCategory;
+    });
+  }, [query, results, selectedCategory]);
+
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-zinc-100/95 dark:bg-black/95 backdrop-blur-2xl animate-fadeIn">
       {/* Top Search Bar */}
-      <div className="pt-safe px-4 pb-3 border-b border-black/5 dark:border-white/10 flex items-center gap-3">
+      <div className="pt-safe px-4 pb-2 border-b border-black/5 dark:border-white/10 flex items-center gap-3">
         <div className="flex-1 relative flex items-center">
           <Search className="w-4 h-4 absolute left-3 text-zinc-400" />
           <input
@@ -84,6 +100,24 @@ export const SearchModal: React.FC<SearchModalProps> = ({
         </button>
       </div>
 
+      {/* Category Filter Pills Row inside Search */}
+      <div className="px-4 py-2 border-b border-black/5 dark:border-white/5 flex items-center gap-1.5 overflow-x-auto no-scrollbar max-w-md mx-auto w-full">
+        {MARKET_CATEGORIES.map((cat) => (
+          <button
+            key={cat.id}
+            type="button"
+            onClick={() => setSelectedCategory(cat.id)}
+            className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-all ios-active ${
+              selectedCategory === cat.id
+                ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 shadow-sm font-bold'
+                : 'bg-zinc-200/70 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+            }`}
+          >
+            {cat.label}
+          </button>
+        ))}
+      </div>
+
       {/* Content Area */}
       <div className="flex-1 overflow-y-auto px-4 py-3 max-w-md mx-auto w-full">
         {isLoading ? (
@@ -92,12 +126,12 @@ export const SearchModal: React.FC<SearchModalProps> = ({
             <span className="text-xs">Buscando empresas...</span>
           </div>
         ) : query.trim() ? (
-          results.length > 0 ? (
+          displayedItems.length > 0 ? (
             <div className="space-y-2">
               <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider px-1 block mb-1">
-                Resultados ({results.length})
+                Resultados ({displayedItems.length})
               </span>
-              {results.map((res) => (
+              {displayedItems.map((res: any) => (
                 <button
                   key={`${res.symbol}_${res.exchange}`}
                   type="button"
@@ -107,40 +141,40 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                   }}
                   className="w-full p-3 rounded-2xl bg-white dark:bg-zinc-900 border border-black/5 dark:border-white/5 flex items-center justify-between hover:border-ios-blue transition-colors text-left shadow-sm ios-active"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center font-bold text-xs text-zinc-800 dark:text-zinc-200">
+                  <div className="flex items-center gap-3 flex-1 min-w-0 mr-2">
+                    <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center font-bold text-xs text-zinc-800 dark:text-zinc-200 shrink-0">
                       {res.symbol.substring(0, 4)}
                     </div>
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm text-zinc-900 dark:text-zinc-100">
+                        <span className="font-bold text-sm text-zinc-900 dark:text-zinc-100 shrink-0">
                           {res.symbol}
                         </span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 font-medium truncate max-w-[150px]">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 font-medium truncate max-w-[140px]">
                           {res.industry || res.sector || res.exchange}
                         </span>
                       </div>
-                      <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate max-w-[200px]">
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate block w-full mt-0.5">
                         {res.name}
                       </p>
                     </div>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-zinc-400" />
+                  <ChevronRight className="w-4 h-4 text-zinc-400 shrink-0" />
                 </button>
               ))}
             </div>
           ) : (
             <div className="text-center py-16 text-zinc-400 text-xs">
-              No se encontraron coincidencias para "{query}". Prueba con tickers como NVDA, AAPL, TSLA, BTC-USD.
+              No se encontraron coincidencias para "{query}" en esta categoría.
             </div>
           )
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider px-1 block">
-              Empresas y Activos Populares
+              Empresas y Activos ({displayedItems.length})
             </span>
             <div className="space-y-2">
-              {POPULAR_SYMBOLS.map((item) => (
+              {displayedItems.map((item: any) => (
                 <button
                   key={item.symbol}
                   type="button"
@@ -150,25 +184,25 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                   }}
                   className="w-full p-3 rounded-2xl bg-white dark:bg-zinc-900 border border-black/5 dark:border-white/5 flex items-center justify-between hover:border-ios-blue transition-colors text-left shadow-sm ios-active"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center font-bold text-xs text-zinc-800 dark:text-zinc-200">
+                  <div className="flex items-center gap-3 flex-1 min-w-0 mr-2">
+                    <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center font-bold text-xs text-zinc-800 dark:text-zinc-200 shrink-0">
                       {item.symbol.substring(0, 4)}
                     </div>
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm text-zinc-900 dark:text-zinc-100">
+                        <span className="font-bold text-sm text-zinc-900 dark:text-zinc-100 shrink-0">
                           {item.symbol}
                         </span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 font-medium">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 font-medium truncate max-w-[140px]">
                           {item.sector}
                         </span>
                       </div>
-                      <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate max-w-[200px]">
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate block w-full mt-0.5">
                         {item.name}
                       </p>
                     </div>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-zinc-400" />
+                  <ChevronRight className="w-4 h-4 text-zinc-400 shrink-0" />
                 </button>
               ))}
             </div>

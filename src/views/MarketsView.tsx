@@ -1,14 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Star } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
-import { POPULAR_SYMBOLS, formatCurrency, formatPercent } from '../services/marketApi';
+import { POPULAR_SYMBOLS, MARKET_CATEGORIES, mapYahooToCategory, formatCurrency, formatPercent } from '../services/marketApi';
 
 interface MarketsViewProps {
   onSelectSymbol: (symbol: string) => void;
   onOpenSearch: () => void;
 }
-
-type MarketCategory = 'ALL' | 'GAMING' | 'TECH' | 'CRYPTO' | 'AUTO' | 'MEDIA' | 'CONSUMER' | 'SPAIN' | 'INDICES' | 'GAINERS' | 'LOSERS';
 
 const CATEGORY_ORDER: Record<string, number> = {
   GAMING: 1,
@@ -17,9 +15,10 @@ const CATEGORY_ORDER: Record<string, number> = {
   AUTO: 4,
   MEDIA: 5,
   CONSUMER: 6,
-  SPAIN: 7,
-  INDICES: 8,
-  OTHER: 9,
+  BANKING: 7,
+  ENERGY: 8,
+  INDICES: 9,
+  OTHER: 99,
 };
 
 export const MarketsView: React.FC<MarketsViewProps> = ({
@@ -27,22 +26,14 @@ export const MarketsView: React.FC<MarketsViewProps> = ({
   onOpenSearch,
 }) => {
   const { liveQuotes, watchlist, toggleWatchlist } = useTrading();
-  const [selectedCategory, setSelectedCategory] = useState<MarketCategory>('ALL');
+  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [onlyFavorites, setOnlyFavorites] = useState<boolean>(false);
 
-  const categories = [
-    { id: 'ALL' as MarketCategory, label: 'Todo' },
-    { id: 'GAMING' as MarketCategory, label: 'Videojuegos' },
-    { id: 'TECH' as MarketCategory, label: 'Tecnología e IA' },
-    { id: 'CRYPTO' as MarketCategory, label: 'Criptomonedas (24/7)' },
-    { id: 'AUTO' as MarketCategory, label: 'Automotriz' },
-    { id: 'MEDIA' as MarketCategory, label: 'Streaming y Cine' },
-    { id: 'CONSUMER' as MarketCategory, label: 'Consumo y Moda' },
-    { id: 'SPAIN' as MarketCategory, label: 'España (IBEX 35)' },
-    { id: 'INDICES' as MarketCategory, label: 'Índices y Oro' },
-    { id: 'GAINERS' as MarketCategory, label: 'Subiendo hoy' },
-    { id: 'LOSERS' as MarketCategory, label: 'Bajando hoy' },
-  ];
+  const categories = useMemo(() => [
+    ...MARKET_CATEGORIES,
+    { id: 'GAINERS', label: 'Subiendo hoy' },
+    { id: 'LOSERS', label: 'Bajando hoy' },
+  ], []);
 
   // Dynamically combine POPULAR_SYMBOLS with any custom asset in user's watchlist
   const allAvailableSymbols = useMemo(() => {
@@ -53,13 +44,13 @@ export const MarketsView: React.FC<MarketsViewProps> = ({
       if (!existing.has(sym)) {
         const quote = liveQuotes[sym];
         const isCrypto = sym.includes('-') || sym.includes('USD') || sym.includes('BTC') || sym.includes('ETH');
-        const isSpain = sym.endsWith('.MC');
+        const autoCat = mapYahooToCategory({ symbol: sym, type: isCrypto ? 'cryptocurrency' : 'equity' });
 
         list.unshift({
           symbol: sym,
           name: quote?.name || `${sym}`,
-          sector: isCrypto ? 'Criptomoneda' : isSpain ? 'Bolsa España' : 'Acción Global',
-          category: isCrypto ? 'CRYPTO' : isSpain ? 'SPAIN' : 'TECH',
+          sector: isCrypto ? 'Criptomoneda' : 'Acción Global',
+          category: autoCat,
           basePrice: quote?.price || 100,
         });
         existing.add(sym);
@@ -81,30 +72,16 @@ export const MarketsView: React.FC<MarketsViewProps> = ({
     }
 
     // 2. Filter by category
+    const cat = stock.category || mapYahooToCategory(stock);
     switch (selectedCategory) {
-      case 'GAMING':
-        return stock.category === 'GAMING';
-      case 'TECH':
-        return stock.category === 'TECH';
-      case 'CRYPTO':
-        return stock.category === 'CRYPTO';
-      case 'AUTO':
-        return stock.category === 'AUTO';
-      case 'MEDIA':
-        return stock.category === 'MEDIA';
-      case 'CONSUMER':
-        return stock.category === 'CONSUMER';
-      case 'SPAIN':
-        return stock.category === 'SPAIN';
-      case 'INDICES':
-        return stock.category === 'INDICES';
       case 'GAINERS':
         return change > 0;
       case 'LOSERS':
         return change < 0;
       case 'ALL':
-      default:
         return true;
+      default:
+        return cat === selectedCategory;
     }
   }).sort((a: any, b: any) => {
     const isFavA = watchlist.includes(a.symbol);
@@ -115,8 +92,10 @@ export const MarketsView: React.FC<MarketsViewProps> = ({
     if (!isFavA && isFavB) return 1;
 
     // Orden por categoría
-    const orderA = CATEGORY_ORDER[a.category] || 99;
-    const orderB = CATEGORY_ORDER[b.category] || 99;
+    const catA = a.category || mapYahooToCategory(a);
+    const catB = b.category || mapYahooToCategory(b);
+    const orderA = CATEGORY_ORDER[catA] || 99;
+    const orderB = CATEGORY_ORDER[catB] || 99;
     if (orderA !== orderB) {
       return orderA - orderB;
     }

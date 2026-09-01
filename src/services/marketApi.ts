@@ -52,14 +52,65 @@ export const POPULAR_SYMBOLS = [
   { symbol: 'GLD', name: 'SPDR Gold Shares (Oro)', sector: 'ETF Oro', category: 'INDICES', basePrice: 232.40 },
 
   // --- Bolsa Española (IBEX 35) ---
-  { symbol: 'SAN.MC', name: 'Banco Santander S.A.', sector: 'Banca', category: 'SPAIN', basePrice: 4.45 },
-  { symbol: 'BBVA.MC', name: 'BBVA S.A.', sector: 'Banca', category: 'SPAIN', basePrice: 9.35 },
-  { symbol: 'ITX.MC', name: 'Inditex (Zara, Bershka, Pull&Bear)', sector: 'Moda Retail', category: 'SPAIN', basePrice: 48.90 },
-  { symbol: 'IBE.MC', name: 'Iberdrola S.A.', sector: 'Energía', category: 'SPAIN', basePrice: 13.20 },
-  { symbol: 'REP.MC', name: 'Repsol S.A.', sector: 'Petróleo & Energía', category: 'SPAIN', basePrice: 12.40 },
-  { symbol: 'TEF.MC', name: 'Telefónica S.A.', sector: 'Telecomunicaciones', category: 'SPAIN', basePrice: 4.15 },
-  { symbol: 'CABK.MC', name: 'CaixaBank S.A.', sector: 'Banca', category: 'SPAIN', basePrice: 5.25 },
+  { symbol: 'SAN.MC', name: 'Banco Santander S.A.', sector: 'Banca', category: 'BANKING', basePrice: 4.45 },
+  { symbol: 'BBVA.MC', name: 'BBVA S.A.', sector: 'Banca', category: 'BANKING', basePrice: 9.35 },
+  { symbol: 'ITX.MC', name: 'Inditex (Zara, Bershka, Pull&Bear)', sector: 'Moda Retail', category: 'CONSUMER', basePrice: 48.90 },
+  { symbol: 'IBE.MC', name: 'Iberdrola S.A.', sector: 'Energía', category: 'ENERGY', basePrice: 13.20 },
+  { symbol: 'REP.MC', name: 'Repsol S.A.', sector: 'Petróleo & Energía', category: 'ENERGY', basePrice: 12.40 },
+  { symbol: 'TEF.MC', name: 'Telefónica S.A.', sector: 'Telecomunicaciones', category: 'MEDIA', basePrice: 4.15 },
+  { symbol: 'CABK.MC', name: 'CaixaBank S.A.', sector: 'Banca', category: 'BANKING', basePrice: 5.25 },
 ];
+
+export const MARKET_CATEGORIES = [
+  { id: 'ALL', label: 'Todo' },
+  { id: 'GAMING', label: 'Videojuegos' },
+  { id: 'TECH', label: 'Tecnología e IA' },
+  { id: 'CRYPTO', label: 'Criptomonedas (24/7)' },
+  { id: 'AUTO', label: 'Automotriz' },
+  { id: 'MEDIA', label: 'Streaming y Cine' },
+  { id: 'CONSUMER', label: 'Consumo y Moda' },
+  { id: 'BANKING', label: 'Banca y Finanzas' },
+  { id: 'ENERGY', label: 'Energía y Petróleo' },
+  { id: 'INDICES', label: 'Índices y ETFs' },
+];
+
+export function mapYahooToCategory(item: { sector?: string; industry?: string; type?: string; symbol?: string; category?: string }): string {
+  if (item.category && item.category !== 'OTHER') return item.category;
+
+  const ind = (item.industry || '').toLowerCase();
+  const sec = (item.sector || '').toLowerCase();
+  const typ = (item.type || '').toLowerCase();
+  const sym = (item.symbol || '').toUpperCase();
+
+  if (typ === 'cryptocurrency' || sym.includes('-USD') || sym.includes('BTC') || sym.includes('ETH') || sym.includes('SOL')) {
+    return 'CRYPTO';
+  }
+  if (typ === 'etf' || sym === 'SPY' || sym === 'QQQ' || sym === 'GLD' || sym.includes('ETF')) {
+    return 'INDICES';
+  }
+  if (ind.includes('gaming') || ind.includes('game') || ind.includes('multimedia') || ['TTWO', 'EA', 'UBI.PA', 'RBLX', 'SONY', 'NTDOY', 'CDR.WA'].includes(sym)) {
+    return 'GAMING';
+  }
+  if (ind.includes('auto') || ind.includes('vehicle') || ['TSLA', 'RACE', 'F', 'GM', 'BMW3.DE', 'P911.DE'].includes(sym)) {
+    return 'AUTO';
+  }
+  if (ind.includes('entertainment') || ind.includes('broadcasting') || ind.includes('streaming') || ind.includes('telecom') || ['NFLX', 'DIS', 'SPOT', 'WBD', 'TEF.MC'].includes(sym)) {
+    return 'MEDIA';
+  }
+  if (sec.includes('financial') || ind.includes('bank') || ind.includes('credit') || ['SAN.MC', 'BBVA.MC', 'CABK.MC', 'JPM', 'BAC', 'V', 'MA'].includes(sym)) {
+    return 'BANKING';
+  }
+  if (sec.includes('energy') || sec.includes('utilities') || ind.includes('oil') || ind.includes('gas') || ['REP.MC', 'IBE.MC', 'XOM', 'CVX'].includes(sym)) {
+    return 'ENERGY';
+  }
+  if (sec.includes('consumer') || ind.includes('retail') || ind.includes('apparel') || ind.includes('beverage') || ind.includes('restaurant') || ['NKE', 'KO', 'PEP', 'MCD', 'SBUX', 'ITX.MC', 'MC.PA'].includes(sym)) {
+    return 'CONSUMER';
+  }
+  if (sec.includes('technology') || ind.includes('semiconductor') || ind.includes('software') || ind.includes('electronics') || ['NVDA', 'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'AMD', 'PLTR', 'INTC', 'TSM'].includes(sym)) {
+    return 'TECH';
+  }
+  return 'TECH';
+}
 
 const SUPABASE_PROJECT_URL = 'https://vvxfewktdsltzsxfumio.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_RXWhW8Lu_vIehqKQJAPsQw_GkvczmaZ';
