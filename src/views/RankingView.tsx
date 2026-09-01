@@ -1,26 +1,20 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Trophy,
-  Medal,
   Lock,
   Globe,
-  TrendingUp,
-  TrendingDown,
   ChevronRight,
   X,
   Search,
   RefreshCw,
-  Loader2,
   KeyRound,
-  CheckCircle2,
   AlertCircle,
   Briefcase,
   History,
   ShieldCheck,
-  Eye,
 } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
-import { GameSummary, GameSaveData, Position, TradeRecord } from '../types/market';
+import { GameSummary, GameSaveData } from '../types/market';
 import { formatCurrency, formatPercent } from '../services/marketApi';
 import { loadGameData, isGameUnlocked, unlockGame } from '../services/gamesHubApi';
 import { subscribeToSupabaseRealtime } from '../services/supabaseService';
@@ -71,18 +65,6 @@ export const RankingView: React.FC = () => {
     );
   }, [sortedGames, searchQuery]);
 
-  // Current active game ranking position
-  const activeGameRank = useMemo(() => {
-    if (!activeGameId) return null;
-    const index = sortedGames.findIndex((g) => g.id === activeGameId);
-    return index >= 0 ? index + 1 : null;
-  }, [sortedGames, activeGameId]);
-
-  // Top 3 Podium
-  const top1 = sortedGames[0];
-  const top2 = sortedGames[1];
-  const top3 = sortedGames[2];
-
   const handleInspectGame = async (summary: GameSummary) => {
     setIsLoadingDetail(true);
     try {
@@ -129,182 +111,64 @@ export const RankingView: React.FC = () => {
 
   return (
     <div className="space-y-4 pb-24 max-w-md mx-auto px-4 pt-2">
-      {/* Top Banner / Ranking Position Header */}
-      <div className="bg-gradient-to-br from-amber-500/15 via-zinc-100 to-amber-500/5 dark:from-amber-500/20 dark:via-zinc-900 dark:to-zinc-900 rounded-3xl p-5 border border-amber-500/20 shadow-ios-sm relative overflow-hidden">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-400 text-white flex items-center justify-center shadow-md">
-              <Trophy className="w-6 h-6 stroke-[2.5]" />
-            </div>
-            <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 block">
-                Clasificación Global
-              </span>
-              <h2 className="text-lg font-extrabold text-zinc-900 dark:text-zinc-50">
-                Ranking de Jugadores
-              </h2>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => fetchGamesList()}
-            disabled={isLoadingGames}
-            className="p-2 rounded-xl bg-white/80 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-300 shadow-sm ios-active"
-            title="Refrescar ranking"
-          >
-            <RefreshCw className={`w-4 h-4 ${isLoadingGames ? 'animate-spin text-amber-500' : ''}`} />
-          </button>
+      {/* Search and Refresh Bar */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Buscar jugador..."
+            className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-white dark:bg-ios-card-dark border border-black/5 dark:border-white/5 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-ios-blue shadow-ios-sm"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
-        {activeGameRank !== null && (
-          <div className="mt-4 pt-3 border-t border-amber-500/20 flex items-center justify-between text-xs">
-            <span className="text-zinc-500 dark:text-zinc-400 font-medium">
-              Tu partida activa:
-            </span>
-            <span className="font-bold text-amber-600 dark:text-amber-400 font-mono bg-amber-500/15 px-2.5 py-1 rounded-full border border-amber-500/30">
-              Puesto #{activeGameRank} de {sortedGames.length}
-            </span>
-          </div>
-        )}
+        <button
+          type="button"
+          onClick={() => fetchGamesList()}
+          disabled={isLoadingGames}
+          className="w-10 h-10 rounded-2xl bg-white dark:bg-ios-card-dark border border-black/5 dark:border-white/5 flex items-center justify-center text-zinc-600 dark:text-zinc-300 shadow-ios-sm ios-active shrink-0"
+          title="Actualizar ranking"
+        >
+          <RefreshCw className={`w-4 h-4 ${isLoadingGames ? 'animate-spin text-ios-blue' : ''}`} />
+        </button>
       </div>
 
-      {/* Top 3 Podium (If at least 2 games exist) */}
-      {sortedGames.length >= 2 && (
-        <div className="grid grid-cols-3 gap-2 items-end pt-2 pb-1">
-          {/* #2 Silver */}
-          {top2 && (
-            <button
-              type="button"
-              onClick={() => handleInspectGame(top2)}
-              className="bg-white dark:bg-ios-card-dark rounded-2xl p-3 border border-zinc-200 dark:border-zinc-800 shadow-ios-sm text-center ios-active relative flex flex-col items-center h-36 justify-between hover:border-zinc-400"
-            >
-              <div className="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center font-black text-xs shadow-sm">
-                🥈
-              </div>
-              <div className="w-full">
-                <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 block truncate">
-                  {top2.name}
-                </span>
-                <span className="text-[11px] font-mono font-bold text-zinc-900 dark:text-zinc-50 block mt-0.5">
-                  {formatCurrency(top2.totalNetWorth || top2.initialCash)}
-                </span>
-              </div>
-              <span
-                className={`text-[10px] font-mono font-bold ${
-                  (top2.totalPnLPercent || 0) >= 0 ? 'text-ios-green' : 'text-ios-red'
-                }`}
-              >
-                {(top2.totalPnLPercent || 0) >= 0 ? '+' : ''}
-                {formatPercent(top2.totalPnLPercent || 0)}
-              </span>
-            </button>
-          )}
-
-          {/* #1 Gold */}
-          {top1 && (
-            <button
-              type="button"
-              onClick={() => handleInspectGame(top1)}
-              className="bg-gradient-to-b from-amber-500/15 via-white to-white dark:from-amber-500/20 dark:via-ios-card-dark dark:to-ios-card-dark rounded-3xl p-3.5 border-2 border-amber-400 dark:border-amber-500 shadow-ios text-center ios-active relative flex flex-col items-center h-44 justify-between -mt-3"
-            >
-              <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-amber-400 to-yellow-300 text-amber-950 flex items-center justify-center font-black text-sm shadow-md ring-4 ring-amber-400/20">
-                🥇
-              </div>
-              <div className="w-full">
-                <span className="text-xs font-extrabold text-zinc-900 dark:text-zinc-50 block truncate">
-                  {top1.name}
-                </span>
-                <span className="text-xs font-mono font-black text-amber-600 dark:text-amber-400 block mt-0.5">
-                  {formatCurrency(top1.totalNetWorth || top1.initialCash)}
-                </span>
-              </div>
-              <span
-                className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded-full ${
-                  (top1.totalPnLPercent || 0) >= 0
-                    ? 'bg-ios-green/15 text-ios-green'
-                    : 'bg-ios-red/15 text-ios-red'
-                }`}
-              >
-                {(top1.totalPnLPercent || 0) >= 0 ? '+' : ''}
-                {formatPercent(top1.totalPnLPercent || 0)}
-              </span>
-            </button>
-          )}
-
-          {/* #3 Bronze */}
-          {top3 ? (
-            <button
-              type="button"
-              onClick={() => handleInspectGame(top3)}
-              className="bg-white dark:bg-ios-card-dark rounded-2xl p-3 border border-zinc-200 dark:border-zinc-800 shadow-ios-sm text-center ios-active relative flex flex-col items-center h-32 justify-between hover:border-amber-700"
-            >
-              <div className="w-7 h-7 rounded-full bg-amber-700/20 text-amber-800 dark:text-amber-300 flex items-center justify-center font-black text-xs shadow-sm">
-                🥉
-              </div>
-              <div className="w-full">
-                <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 block truncate">
-                  {top3.name}
-                </span>
-                <span className="text-[11px] font-mono font-bold text-zinc-900 dark:text-zinc-50 block mt-0.5">
-                  {formatCurrency(top3.totalNetWorth || top3.initialCash)}
-                </span>
-              </div>
-              <span
-                className={`text-[10px] font-mono font-bold ${
-                  (top3.totalPnLPercent || 0) >= 0 ? 'text-ios-green' : 'text-ios-red'
-                }`}
-              >
-                {(top3.totalPnLPercent || 0) >= 0 ? '+' : ''}
-                {formatPercent(top3.totalPnLPercent || 0)}
-              </span>
-            </button>
-          ) : (
-            <div className="h-32 rounded-2xl border border-dashed border-black/10 dark:border-white/10 flex items-center justify-center text-zinc-400 text-xs">
-              #3 Vacío
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Search Input */}
-      <div className="relative">
-        <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Buscar jugador o partida..."
-          className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-white dark:bg-ios-card-dark border border-black/5 dark:border-white/10 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-ios-sm"
-        />
-        {searchQuery && (
-          <button
-            type="button"
-            onClick={() => setSearchQuery('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        )}
-      </div>
-
-      {/* Full Leaderboard List */}
+      {/* Leaderboard Table Section */}
       <div className="space-y-2">
         <div className="flex items-center justify-between px-1">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
-            Tabla Clasificatoria ({filteredGames.length})
+          <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">
+            Clasificación ({filteredGames.length})
           </span>
-          <span className="text-[11px] text-zinc-400">Pulsa para ver apuestas</span>
+          <span className="text-[11px] text-zinc-400 font-medium">Pulsa para ver apuestas</span>
         </div>
 
-        {filteredGames.length === 0 ? (
-          <div className="p-8 text-center bg-white dark:bg-ios-card-dark rounded-3xl border border-black/5 dark:border-white/10 text-zinc-400 text-xs">
+        {isLoadingGames && filteredGames.length === 0 ? (
+          <div className="py-16 text-center text-zinc-400 space-y-2 bg-white dark:bg-ios-card-dark rounded-3xl border border-black/5 dark:border-white/5 shadow-ios-sm">
+            <RefreshCw className="w-6 h-6 animate-spin mx-auto text-ios-blue" />
+            <p className="text-xs">Cargando clasificación...</p>
+          </div>
+        ) : filteredGames.length === 0 ? (
+          <div className="p-8 text-center bg-white dark:bg-ios-card-dark rounded-3xl border border-black/5 dark:border-white/5 text-zinc-400 text-xs shadow-ios-sm">
             No se encontraron jugadores que coincidan con la búsqueda.
           </div>
         ) : (
-          <div className="bg-white dark:bg-ios-card-dark rounded-3xl border border-black/5 dark:border-white/5 shadow-ios-sm divide-y divide-black/5 dark:divide-white/5 overflow-hidden">
+          <div className="bg-white dark:bg-ios-card-dark rounded-3xl border border-black/5 dark:border-white/5 shadow-ios divide-y divide-black/5 dark:divide-white/5 overflow-hidden">
             {filteredGames.map((game, idx) => {
               const rank = idx + 1;
+              const isTop1 = rank === 1;
+              const isTop2 = rank === 2;
+              const isTop3 = rank === 3;
               const isActive = game.id === activeGameId;
               const isProfit = (game.totalPnL || 0) >= 0;
               const isPrivate = game.isPrivate ?? true;
@@ -314,42 +178,49 @@ export const RankingView: React.FC = () => {
                   key={game.id}
                   type="button"
                   onClick={() => handleInspectGame(game)}
-                  className={`w-full p-3.5 flex items-center justify-between text-left transition-colors ios-active hover:bg-zinc-50 dark:hover:bg-zinc-800/40 ${
-                    isActive ? 'bg-amber-500/5 dark:bg-amber-500/10' : ''
+                  className={`w-full p-4 flex items-center justify-between text-left transition-colors ios-active hover:bg-zinc-50 dark:hover:bg-zinc-800/40 ${
+                    isActive ? 'bg-ios-blue/5 dark:bg-ios-blue/10' : ''
                   }`}
                 >
-                  {/* Left: Position Rank & Name */}
+                  {/* Left: Rank Badge & Info */}
                   <div className="flex items-center gap-3">
-                    <span
-                      className={`w-6 text-center font-mono font-black text-xs ${
-                        rank === 1
-                          ? 'text-amber-500 text-sm'
-                          : rank === 2
-                          ? 'text-slate-400 text-sm'
-                          : rank === 3
-                          ? 'text-amber-700 text-sm'
-                          : 'text-zinc-400'
+                    {/* Rank Badge */}
+                    <div
+                      className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
+                        isTop1
+                          ? 'bg-amber-400/20 text-amber-500 font-extrabold ring-1 ring-amber-400/40'
+                          : isTop2
+                          ? 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold'
+                          : isTop3
+                          ? 'bg-amber-700/15 text-amber-800 dark:text-amber-300 font-bold'
+                          : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 font-mono'
                       }`}
                     >
-                      #{rank}
-                    </span>
+                      {isTop1 ? '🥇' : isTop2 ? '🥈' : isTop3 ? '🥉' : `#${rank}`}
+                    </div>
 
                     <div>
                       <div className="flex items-center gap-1.5">
-                        <span className="text-sm font-bold text-zinc-900 dark:text-zinc-50 max-w-[130px] sm:max-w-[180px] truncate">
+                        <span
+                          className={`text-sm font-bold truncate max-w-[130px] sm:max-w-[180px] ${
+                            isTop1
+                              ? 'text-zinc-900 dark:text-zinc-50 font-extrabold'
+                              : 'text-zinc-900 dark:text-zinc-100'
+                          }`}
+                        >
                           {game.name}
                         </span>
 
                         {isPrivate ? (
                           <span
-                            title="Partida Privada con PIN"
+                            title="Partida Privada"
                             className="text-zinc-400 flex items-center"
                           >
                             <Lock className="w-3 h-3" />
                           </span>
                         ) : (
                           <span
-                            title="Partida Pública Abierta"
+                            title="Partida Pública"
                             className="text-ios-blue flex items-center"
                           >
                             <Globe className="w-3 h-3" />
@@ -357,13 +228,13 @@ export const RankingView: React.FC = () => {
                         )}
 
                         {isActive && (
-                          <span className="px-1.5 py-0.2 rounded-md bg-amber-500/20 text-amber-600 dark:text-amber-400 text-[9px] font-black uppercase tracking-wider">
+                          <span className="px-1.5 py-0.5 rounded-md bg-ios-blue/15 text-ios-blue text-[9px] font-bold uppercase tracking-wider">
                             Tú
                           </span>
                         )}
                       </div>
 
-                      <span className="text-[10px] text-zinc-400">
+                      <span className="text-[11px] text-zinc-400 font-medium">
                         {game.positionsCount || 0} apuesta(s) activas
                       </span>
                     </div>
@@ -372,7 +243,7 @@ export const RankingView: React.FC = () => {
                   {/* Right: Net Worth & Percent Return */}
                   <div className="flex items-center gap-2 text-right">
                     <div>
-                      <span className="text-xs sm:text-sm font-bold font-mono text-zinc-900 dark:text-zinc-100 block">
+                      <span className="text-sm font-bold font-mono text-zinc-900 dark:text-zinc-50 block">
                         {formatCurrency(game.totalNetWorth || game.initialCash)}
                       </span>
                       <span
@@ -385,7 +256,7 @@ export const RankingView: React.FC = () => {
                       </span>
                     </div>
 
-                    <ChevronRight className="w-4 h-4 text-zinc-300 dark:text-zinc-600" />
+                    <ChevronRight className="w-4 h-4 text-zinc-300 dark:text-zinc-600 shrink-0" />
                   </div>
                 </button>
               );
@@ -401,7 +272,7 @@ export const RankingView: React.FC = () => {
             {/* Modal Header */}
             <div className="p-4 border-b border-black/5 dark:border-white/10 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-2xl bg-amber-500/15 text-amber-500 flex items-center justify-center font-bold">
+                <div className="w-9 h-9 rounded-2xl bg-ios-blue/15 text-ios-blue flex items-center justify-center font-bold">
                   <Trophy className="w-4 h-4" />
                 </div>
                 <div>
@@ -476,7 +347,7 @@ export const RankingView: React.FC = () => {
                 onClick={() => setDetailTab('positions')}
                 className={`pb-2.5 px-3 text-xs font-bold flex items-center gap-1.5 border-b-2 transition-colors ${
                   detailTab === 'positions'
-                    ? 'border-amber-500 text-amber-500'
+                    ? 'border-ios-blue text-ios-blue'
                     : 'border-transparent text-zinc-400 hover:text-zinc-600'
                 }`}
               >
@@ -489,7 +360,7 @@ export const RankingView: React.FC = () => {
                 onClick={() => setDetailTab('history')}
                 className={`pb-2.5 px-3 text-xs font-bold flex items-center gap-1.5 border-b-2 transition-colors ${
                   detailTab === 'history'
-                    ? 'border-amber-500 text-amber-500'
+                    ? 'border-ios-blue text-ios-blue'
                     : 'border-transparent text-zinc-400 hover:text-zinc-600'
                 }`}
               >
@@ -603,7 +474,7 @@ export const RankingView: React.FC = () => {
             {/* Bottom Actions */}
             <div className="p-4 border-t border-black/5 dark:border-white/10 bg-white dark:bg-ios-card-dark flex gap-2">
               {selectedGameData.id === activeGameId ? (
-                <div className="w-full py-3 rounded-2xl bg-amber-500/15 text-amber-600 dark:text-amber-400 text-xs font-bold text-center flex items-center justify-center gap-1.5">
+                <div className="w-full py-3 rounded-2xl bg-ios-blue/15 text-ios-blue text-xs font-bold text-center flex items-center justify-center gap-1.5">
                   <ShieldCheck className="w-4 h-4" />
                   <span>Tu partida en curso</span>
                 </div>
@@ -671,7 +542,7 @@ export const RankingView: React.FC = () => {
                   setPinError(null);
                 }}
                 placeholder="Escribe el PIN..."
-                className="w-full px-3.5 py-2.5 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-center font-mono text-base tracking-widest text-zinc-900 dark:text-zinc-50 border border-black/5 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                className="w-full px-3.5 py-2.5 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-center font-mono text-base tracking-widest text-zinc-900 dark:text-zinc-50 border border-black/5 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-ios-blue"
               />
 
               {pinError && (
@@ -685,7 +556,7 @@ export const RankingView: React.FC = () => {
                 <button
                   type="submit"
                   disabled={!pinInput.trim()}
-                  className="flex-1 py-3 rounded-2xl bg-amber-500 text-white font-bold text-xs shadow-md ios-active disabled:opacity-50"
+                  className="flex-1 py-3 rounded-2xl bg-ios-blue text-white font-bold text-xs shadow-md ios-active disabled:opacity-50"
                 >
                   Desbloquear y Entrar
                 </button>
