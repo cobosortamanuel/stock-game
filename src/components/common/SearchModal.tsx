@@ -116,8 +116,8 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                         <span className="font-bold text-sm text-zinc-900 dark:text-zinc-100">
                           {res.symbol}
                         </span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 font-medium">
-                          {res.exchange}
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 font-medium truncate max-w-[150px]">
+                          {res.industry || res.sector || res.exchange}
                         </span>
                       </div>
                       <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate max-w-[200px]">

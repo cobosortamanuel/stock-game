@@ -270,7 +270,9 @@ export async function searchSymbols(query: string): Promise<SearchResult[]> {
             symbol: q.symbol,
             name: q.longname || q.shortname || q.symbol,
             exchange: q.exchange || q.exchDisp || 'Global',
-            type: q.quoteType || 'EQUITY'
+            type: q.quoteType || 'EQUITY',
+            sector: q.sectorDisp || q.sector || (q.quoteType === 'CRYPTOCURRENCY' ? 'Cripto' : q.quoteType === 'ETF' ? 'ETF' : undefined),
+            industry: q.industryDisp || q.industry,
           }));
 
         remoteResults.forEach((item: any) => {

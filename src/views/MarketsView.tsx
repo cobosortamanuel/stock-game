@@ -8,7 +8,7 @@ interface MarketsViewProps {
   onOpenSearch: () => void;
 }
 
-type MarketCategory = 'ALL' | 'FAVORITES' | 'GAMING' | 'TECH' | 'CRYPTO' | 'AUTO' | 'MEDIA' | 'CONSUMER' | 'SPAIN' | 'INDICES' | 'GAINERS' | 'LOSERS';
+type MarketCategory = 'ALL' | 'GAMING' | 'TECH' | 'CRYPTO' | 'AUTO' | 'MEDIA' | 'CONSUMER' | 'SPAIN' | 'INDICES' | 'GAINERS' | 'LOSERS';
 
 const CATEGORY_ORDER: Record<string, number> = {
   GAMING: 1,
@@ -28,10 +28,10 @@ export const MarketsView: React.FC<MarketsViewProps> = ({
 }) => {
   const { liveQuotes, watchlist, toggleWatchlist } = useTrading();
   const [selectedCategory, setSelectedCategory] = useState<MarketCategory>('ALL');
+  const [onlyFavorites, setOnlyFavorites] = useState<boolean>(false);
 
   const categories = [
     { id: 'ALL' as MarketCategory, label: 'Todo' },
-    { id: 'FAVORITES' as MarketCategory, label: 'Favoritos' },
     { id: 'GAMING' as MarketCategory, label: 'Videojuegos' },
     { id: 'TECH' as MarketCategory, label: 'Tecnología e IA' },
     { id: 'CRYPTO' as MarketCategory, label: 'Criptomonedas (24/7)' },
@@ -66,15 +66,19 @@ export const MarketsView: React.FC<MarketsViewProps> = ({
     return list;
   }, [watchlist, liveQuotes]);
 
-  // Filter symbols based on category
+  // Filter symbols based on favorites toggle AND selected category
   const filteredSymbols = allAvailableSymbols.filter((stock: any) => {
     const quote = liveQuotes[stock.symbol];
     const change = quote ? quote.changePercent : 0;
     const isFavorited = watchlist.includes(stock.symbol);
 
+    // 1. If onlyFavorites is toggled on, exclude non-favorites
+    if (onlyFavorites && !isFavorited) {
+      return false;
+    }
+
+    // 2. Filter by category
     switch (selectedCategory) {
-      case 'FAVORITES':
-        return isFavorited;
       case 'GAMING':
         return stock.category === 'GAMING';
       case 'TECH':
@@ -103,11 +107,11 @@ export const MarketsView: React.FC<MarketsViewProps> = ({
     const isFavA = watchlist.includes(a.symbol);
     const isFavB = watchlist.includes(b.symbol);
 
-    // 1. Favoritos siempre arriba del todo
+    // Favoritos primero
     if (isFavA && !isFavB) return -1;
     if (!isFavA && isFavB) return 1;
 
-    // 2. Ordenar según el orden de las categorías de las pestañas
+    // Orden por categoría
     const orderA = CATEGORY_ORDER[a.category] || 99;
     const orderB = CATEGORY_ORDER[b.category] || 99;
     if (orderA !== orderB) {
@@ -119,7 +123,7 @@ export const MarketsView: React.FC<MarketsViewProps> = ({
 
   return (
     <div className="space-y-4 pb-20 max-w-md mx-auto px-4 pt-2">
-      {/* Search Input Bar Trigger + Favorites Quick Button */}
+      {/* Search Input Bar Trigger + Favorites Quick Toggle Button */}
       <div className="flex items-center gap-2">
         <button
           type="button"
@@ -138,16 +142,16 @@ export const MarketsView: React.FC<MarketsViewProps> = ({
         {/* Quick Star Button to toggle Favorites */}
         <button
           type="button"
-          onClick={() => setSelectedCategory((prev) => (prev === 'FAVORITES' ? 'ALL' : 'FAVORITES'))}
+          onClick={() => setOnlyFavorites((prev) => !prev)}
           className={`p-3.5 rounded-3xl border transition-all shadow-ios-sm ios-active flex items-center justify-center shrink-0 ${
-            selectedCategory === 'FAVORITES'
-              ? 'bg-amber-400/20 border-amber-400/40 text-amber-500 dark:text-amber-400 shadow-sm'
+            onlyFavorites
+              ? 'bg-amber-400/20 border-amber-400/50 text-amber-500 dark:text-amber-400 ring-2 ring-amber-400/20 shadow-sm'
               : 'bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-900 dark:to-zinc-950 border-black/5 dark:border-white/10 text-zinc-400 hover:text-amber-400'
           }`}
-          title="Ver solo mis favoritos"
+          title={onlyFavorites ? 'Mostrando solo favoritos' : 'Ver solo mis favoritos'}
           aria-label="Ver solo mis favoritos"
         >
-          <Star className={`w-5 h-5 ${selectedCategory === 'FAVORITES' ? 'fill-amber-400 text-amber-400' : ''}`} />
+          <Star className={`w-5 h-5 ${onlyFavorites ? 'fill-amber-400 text-amber-400' : ''}`} />
         </button>
       </div>
 
@@ -175,10 +179,12 @@ export const MarketsView: React.FC<MarketsViewProps> = ({
           <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 border border-black/5 dark:border-white/5 text-center space-y-2">
             <Star className="w-8 h-8 mx-auto text-zinc-300 dark:text-zinc-600" />
             <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-50">
-              No tienes favoritos todavía
+              {onlyFavorites ? 'Sin favoritos en esta categoría' : 'No hay empresas disponibles'}
             </h3>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-xs mx-auto">
-              Pulsa la estrella en cualquier empresa o búscalas con la lupa para añadirlas a tu lista.
+              {onlyFavorites
+                ? 'No tienes ninguna empresa marcada como favorita en esta categoría seleccionada.'
+                : 'Prueba a cambiar de categoría o busca activos con la lupa.'}
             </p>
           </div>
         ) : (

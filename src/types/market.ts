@@ -95,6 +95,8 @@ export interface SearchResult {
   name: string;
   exchange: string;
   type: string;
+  sector?: string;
+  industry?: string;
 }
 
 export interface GameSummary {
