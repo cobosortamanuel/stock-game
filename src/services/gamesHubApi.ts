@@ -138,28 +138,28 @@ export async function renameGameById(gameId: string, newName: string): Promise<b
   return true;
 }
 
-// Load a specific game's full data
+// Load a specific game's full data (Cloud source of truth when connected)
 export async function loadGameData(gameId: string): Promise<GameSaveData | null> {
   const cleanId = gameId.trim().toUpperCase();
-
-  // Try local first
   const local = getSavedGameSync(cleanId);
-  if (local) return local;
 
-  // If not found locally and cloud is connected, load from Supabase
+  // If cloud is connected, always fetch the freshest data from Supabase
   if (isCloudConnected()) {
     try {
       const cloudData = await fetchGameDataFromSupabase(cleanId);
       if (cloudData) {
-        try {
-          localStorage.setItem(`${LOCAL_GAMES_PREFIX}${cleanId}`, JSON.stringify(cloudData));
-        } catch {}
-        return cloudData;
+        if (!local || (cloudData.updatedAt || 0) >= (local.updatedAt || 0)) {
+          try {
+            localStorage.setItem(`${LOCAL_GAMES_PREFIX}${cleanId}`, JSON.stringify(cloudData));
+          } catch {}
+          return cloudData;
+        }
       }
     } catch {}
   }
 
-  return null;
+  // Fallback to local cache if offline or local is newer
+  return local;
 }
 
 // Delete a game permanently from local storage and Supabase

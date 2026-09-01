@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { Position, TradeRecord, PositionType, StockQuote, GameSummary, GameSaveData } from '../types/market';
 import { fetchStockData, fetchBatchQuotes, POPULAR_SYMBOLS } from '../services/marketApi';
 import { fetchAllGames, syncGameToCloudAndLocal, loadGameData, deleteGameById, renameGameById, generateGameId, getSavedGameSync, getAllGamesSync } from '../services/gamesHubApi';
+import { subscribeToSupabaseRealtime } from '../services/supabaseService';
 
 interface TradingContextType {
   // Theme
@@ -149,6 +150,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   // Active Game In-Memory State (Initialized directly with saved game)
+  const [createdAt, setCreatedAt] = useState<number>(() => initialGameData?.createdAt || Date.now());
   const [initialCash, setInitialCash] = useState<number>(() => initialGameData?.initialCash ?? DEFAULT_INITIAL_BALANCE);
   const [cashAvailable, setCashAvailable] = useState<number>(() => initialGameData?.cashAvailable ?? DEFAULT_INITIAL_BALANCE);
   const [positions, setPositions] = useState<Position[]>(() => initialGameData?.positions || []);
@@ -160,6 +162,12 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const hasInitialized = useRef(false);
   const isHydrated = useRef(false);
+  const isReceivingRemoteUpdateRef = useRef(false);
+  const activeGameIdRef = useRef(activeGameId);
+
+  useEffect(() => {
+    activeGameIdRef.current = activeGameId;
+  }, [activeGameId]);
 
   // Fetch games list
   const fetchGamesList = useCallback(async () => {
@@ -177,8 +185,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const switchGame = useCallback(async (gameId: string) => {
     const data = await loadGameData(gameId);
     if (data) {
+      isReceivingRemoteUpdateRef.current = true;
       setActiveGameId(data.id);
       setActiveGameName(data.name);
+      setCreatedAt(data.createdAt || Date.now());
       setInitialCash(data.initialCash);
       setCashAvailable(data.cashAvailable);
       setPositions(data.positions || []);
@@ -248,7 +258,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, [activeGameId, fetchGamesList, switchGame]);
 
-  // App Initialization: Fetch cloud games cleanly without creating unwanted blank games
+  // App Initialization: Fetch cloud games cleanly and load current game from Supabase
   useEffect(() => {
     if (hasInitialized.current) return;
     hasInitialized.current = true;
@@ -276,6 +286,55 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     initGames();
   }, [fetchGamesList, switchGame]);
+
+  // Real-time synchronization across devices (PC <-> Mobile)
+  useEffect(() => {
+    const syncActiveGameFromCloud = async () => {
+      fetchGamesList();
+      const currentId = activeGameIdRef.current;
+      if (currentId) {
+        const latestData = await loadGameData(currentId);
+        if (latestData) {
+          isReceivingRemoteUpdateRef.current = true;
+          setActiveGameName(latestData.name);
+          setCreatedAt(latestData.createdAt || Date.now());
+          setInitialCash(latestData.initialCash);
+          setCashAvailable(latestData.cashAvailable);
+          setPositions(latestData.positions || []);
+          setTradeHistory(latestData.tradeHistory || []);
+          setWatchlist(sanitizeWatchlist(latestData.watchlist));
+        }
+      }
+    };
+
+    let debounceTimer: any = null;
+    const unsub = subscribeToSupabaseRealtime(() => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        syncActiveGameFromCloud();
+      }, 500);
+    });
+
+    const handleFocus = () => {
+      syncActiveGameFromCloud();
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        syncActiveGameFromCloud();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearTimeout(debounceTimer);
+      unsub();
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [fetchGamesList]);
 
   // Sync Quotes
   const refreshMarketData = useCallback(async () => {
@@ -415,6 +474,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
     if (!activeGameId) return;
 
+    if (isReceivingRemoteUpdateRef.current) {
+      isReceivingRemoteUpdateRef.current = false;
+      return;
+    }
+
     // Verify activeGameId actually exists before syncing
     const exists = gamesList.some((g) => g.id === activeGameId);
     if (!exists && gamesList.length > 0) return;
@@ -422,7 +486,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const gamePayload: GameSaveData = {
       id: activeGameId,
       name: activeGameName,
-      createdAt: Date.now(),
+      createdAt: createdAt || Date.now(),
       updatedAt: Date.now(),
       initialCash,
       cashAvailable,
@@ -449,7 +513,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         clearTimeout(syncDebounceTimerRef.current);
       }
     };
-  }, [activeGameId, activeGameName, initialCash, cashAvailable, cashInvested, totalNetWorth, totalPnL, totalPnLPercent, positions, tradeHistory, watchlist, gamesList]);
+  }, [activeGameId, activeGameName, createdAt, initialCash, cashAvailable, cashInvested, totalNetWorth, totalPnL, totalPnLPercent, positions, tradeHistory, watchlist, gamesList]);
 
   // Trade Execution: Open Position
   const openPosition = (
