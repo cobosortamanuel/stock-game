@@ -7,6 +7,13 @@ export const POPULAR_SYMBOLS = [
   { symbol: 'UBI.PA', name: 'Ubisoft Entertainment SA', sector: 'Videojuegos', category: 'GAMING', basePrice: 12.80 },
   { symbol: 'RBLX', name: 'Roblox Corporation', sector: 'Videojuegos', category: 'GAMING', basePrice: 43.10 },
   { symbol: 'SONY', name: 'Sony Group Corporation', sector: 'Entretenimiento', category: 'GAMING', basePrice: 92.50 },
+  { symbol: 'NTDOY', name: 'Nintendo Co., Ltd.', sector: 'Videojuegos', category: 'GAMING', basePrice: 13.60 },
+  { symbol: 'CDR.WA', name: 'CD Projekt S.A.', sector: 'Videojuegos', category: 'GAMING', basePrice: 165.00 },
+  { symbol: 'U', name: 'Unity Software Inc.', sector: 'Motor de Videojuegos', category: 'GAMING', basePrice: 19.80 },
+  { symbol: 'CCOEY', name: 'Capcom Co., Ltd.', sector: 'Videojuegos', category: 'GAMING', basePrice: 22.40 },
+  { symbol: 'SGAMY', name: 'Sega Sammy Holdings Inc.', sector: 'Videojuegos & Arcade', category: 'GAMING', basePrice: 3.75 },
+  { symbol: 'KNAMF', name: 'Konami Group Corporation', sector: 'Videojuegos', category: 'GAMING', basePrice: 98.20 },
+  { symbol: 'APP', name: 'AppLovin Corporation', sector: 'Gaming & Monetización', category: 'GAMING', basePrice: 285.40 },
 
   // --- Big Tech & Inteligencia Artificial ---
   { symbol: 'NVDA', name: 'NVIDIA Corporation', sector: 'Semiconductores', category: 'TECH', basePrice: 128.50 },
@@ -19,25 +26,65 @@ export const POPULAR_SYMBOLS = [
   { symbol: 'PLTR', name: 'Palantir Technologies', sector: 'Software IA', category: 'TECH', basePrice: 31.40 },
   { symbol: 'INTC', name: 'Intel Corporation', sector: 'Semiconductores', category: 'TECH', basePrice: 20.80 },
   { symbol: 'TSM', name: 'Taiwan Semiconductor Manufacturing', sector: 'Semiconductores', category: 'TECH', basePrice: 172.10 },
+  { symbol: 'ARM', name: 'Arm Holdings plc', sector: 'Arquitectura Chips', category: 'TECH', basePrice: 132.80 },
+  { symbol: 'AVGO', name: 'Broadcom Inc.', sector: 'Semiconductores & Redes', category: 'TECH', basePrice: 164.50 },
+  { symbol: 'QCOM', name: 'QUALCOMM Incorporated', sector: 'Chips Móviles & 5G', category: 'TECH', basePrice: 162.30 },
+  { symbol: 'ASML', name: 'ASML Holding N.V.', sector: 'Litografía Chips', category: 'TECH', basePrice: 718.90 },
+  { symbol: 'CRM', name: 'Salesforce, Inc.', sector: 'Software CRM & Cloud', category: 'TECH', basePrice: 310.20 },
+  { symbol: 'ADBE', name: 'Adobe Inc.', sector: 'Software Creativo & IA', category: 'TECH', basePrice: 495.60 },
+  { symbol: 'ORCL', name: 'Oracle Corporation', sector: 'Base de Datos & Cloud', category: 'TECH', basePrice: 175.40 },
+  { symbol: 'IBM', name: 'International Business Machines', sector: 'Computación & IA', category: 'TECH', basePrice: 218.30 },
+  { symbol: 'NOW', name: 'ServiceNow, Inc.', sector: 'Software Empresarial', category: 'TECH', basePrice: 945.00 },
+  { symbol: 'PANW', name: 'Palo Alto Networks, Inc.', sector: 'Ciberseguridad', category: 'TECH', basePrice: 385.20 },
+  { symbol: 'CRWD', name: 'CrowdStrike Holdings, Inc.', sector: 'Ciberseguridad Cloud', category: 'TECH', basePrice: 342.10 },
+  { symbol: 'DELL', name: 'Dell Technologies Inc.', sector: 'Servidores & Hardware', category: 'TECH', basePrice: 132.40 },
+  { symbol: 'SMCI', name: 'Super Micro Computer, Inc.', sector: 'Servidores IA', category: 'TECH', basePrice: 32.50 },
+  { symbol: 'MU', name: 'Micron Technology, Inc.', sector: 'Memorias & Chips', category: 'TECH', basePrice: 104.20 },
 
-  // --- Criptomonedas (24 Horas / 7 Días) ---
+  // --- Criptomonedas ---
   { symbol: 'BTC-USD', name: 'Bitcoin (USD)', sector: 'Criptomoneda', category: 'CRYPTO', basePrice: 78626.00 },
   { symbol: 'ETH-USD', name: 'Ethereum (USD)', sector: 'Criptomoneda', category: 'CRYPTO', basePrice: 2540.00 },
   { symbol: 'SOL-USD', name: 'Solana (USD)', sector: 'Criptomoneda', category: 'CRYPTO', basePrice: 138.50 },
   { symbol: 'BNB-USD', name: 'Binance Coin (USD)', sector: 'Criptomoneda', category: 'CRYPTO', basePrice: 542.00 },
   { symbol: 'XRP-USD', name: 'Ripple XRP (USD)', sector: 'Criptomoneda', category: 'CRYPTO', basePrice: 0.58 },
   { symbol: 'DOGE-USD', name: 'Dogecoin (USD)', sector: 'Criptomoneda', category: 'CRYPTO', basePrice: 0.10 },
+  { symbol: 'ADA-USD', name: 'Cardano (USD)', sector: 'Criptomoneda', category: 'CRYPTO', basePrice: 0.35 },
+  { symbol: 'AVAX-USD', name: 'Avalanche (USD)', sector: 'Criptomoneda', category: 'CRYPTO', basePrice: 24.80 },
+  { symbol: 'LINK-USD', name: 'Chainlink (USD)', sector: 'Criptomoneda Oráculos', category: 'CRYPTO', basePrice: 11.60 },
+  { symbol: 'DOT-USD', name: 'Polkadot (USD)', sector: 'Criptomoneda', category: 'CRYPTO', basePrice: 4.10 },
+  { symbol: 'NEAR-USD', name: 'NEAR Protocol (USD)', sector: 'Criptomoneda', category: 'CRYPTO', basePrice: 4.85 },
+  { symbol: 'SUI-USD', name: 'Sui Network (USD)', sector: 'Criptomoneda', category: 'CRYPTO', basePrice: 3.20 },
+  { symbol: 'SHIB-USD', name: 'Shiba Inu (USD)', sector: 'Criptomoneda Meme', category: 'CRYPTO', basePrice: 0.000018 },
   { symbol: 'COIN', name: 'Coinbase Global, Inc.', sector: 'Fintech & Cripto', category: 'CRYPTO', basePrice: 218.60 },
+  { symbol: 'MSTR', name: 'MicroStrategy Incorporated', sector: 'Tesorería Bitcoin', category: 'CRYPTO', basePrice: 340.20 },
+  { symbol: 'MARA', name: 'MARA Holdings, Inc.', sector: 'Minería Bitcoin', category: 'CRYPTO', basePrice: 18.90 },
 
   // --- Automotriz & Movilidad ---
   { symbol: 'TSLA', name: 'Tesla, Inc.', sector: 'Automotriz', category: 'AUTO', basePrice: 367.95 },
   { symbol: 'RACE', name: 'Ferrari N.V.', sector: 'Automotriz', category: 'AUTO', basePrice: 448.20 },
   { symbol: 'F', name: 'Ford Motor Company', sector: 'Automotriz', category: 'AUTO', basePrice: 10.90 },
+  { symbol: 'GM', name: 'General Motors Company', sector: 'Automotriz', category: 'AUTO', basePrice: 52.40 },
+  { symbol: 'P911.DE', name: 'Dr. Ing. h.c. F. Porsche AG', sector: 'Automotriz de Lujo', category: 'AUTO', basePrice: 65.20 },
+  { symbol: 'BMW3.DE', name: 'Bayerische Motoren Werke AG (BMW)', sector: 'Automotriz', category: 'AUTO', basePrice: 72.80 },
+  { symbol: 'MBG.DE', name: 'Mercedes-Benz Group AG', sector: 'Automotriz', category: 'AUTO', basePrice: 54.60 },
+  { symbol: 'VOW3.DE', name: 'Volkswagen AG', sector: 'Automotriz', category: 'AUTO', basePrice: 84.10 },
+  { symbol: 'STLA', name: 'Stellantis N.V. (Peugeot, Fiat, Jeep)', sector: 'Automotriz', category: 'AUTO', basePrice: 12.30 },
+  { symbol: 'TM', name: 'Toyota Motor Corporation', sector: 'Automotriz', category: 'AUTO', basePrice: 178.60 },
+  { symbol: 'HMC', name: 'Honda Motor Co., Ltd.', sector: 'Automotriz', category: 'AUTO', basePrice: 26.50 },
+  { symbol: 'RIVN', name: 'Rivian Automotive, Inc.', sector: 'Vehículos Eléctricos', category: 'AUTO', basePrice: 10.40 },
+  { symbol: 'LCID', name: 'Lucid Group, Inc.', sector: 'Vehículos Eléctricos', category: 'AUTO', basePrice: 2.15 },
 
   // --- Entretenimiento & Streaming ---
   { symbol: 'NFLX', name: 'Netflix, Inc.', sector: 'Streaming', category: 'MEDIA', basePrice: 685.20 },
   { symbol: 'DIS', name: 'The Walt Disney Company', sector: 'Entretenimiento', category: 'MEDIA', basePrice: 94.80 },
   { symbol: 'SPOT', name: 'Spotify Technology S.A.', sector: 'Streaming Música', category: 'MEDIA', basePrice: 342.10 },
+  { symbol: 'WBD', name: 'Warner Bros. Discovery, Inc. (HBO Max)', sector: 'Cine & Streaming', category: 'MEDIA', basePrice: 8.95 },
+  { symbol: 'PARA', name: 'Paramount Global', sector: 'Cine & Streaming', category: 'MEDIA', basePrice: 10.80 },
+  { symbol: 'CMCSA', name: 'Comcast Corporation (Universal Studios)', sector: 'Medios & Cine', category: 'MEDIA', basePrice: 42.10 },
+  { symbol: 'TEF.MC', name: 'Telefónica S.A.', sector: 'Telecomunicaciones', category: 'MEDIA', basePrice: 4.15 },
+  { symbol: 'T', name: 'AT&T Inc.', sector: 'Telecomunicaciones', category: 'MEDIA', basePrice: 22.40 },
+  { symbol: 'VZ', name: 'Verizon Communications Inc.', sector: 'Telecomunicaciones', category: 'MEDIA', basePrice: 41.80 },
+  { symbol: 'ROKU', name: 'Roku, Inc.', sector: 'Streaming TV', category: 'MEDIA', basePrice: 68.90 },
 
   // --- Consumo Global & Moda ---
   { symbol: 'NKE', name: 'Nike, Inc.', sector: 'Moda Deportiva', category: 'CONSUMER', basePrice: 82.40 },
@@ -45,20 +92,57 @@ export const POPULAR_SYMBOLS = [
   { symbol: 'PEP', name: 'PepsiCo, Inc.', sector: 'Bebidas & Snacks', category: 'CONSUMER', basePrice: 174.50 },
   { symbol: 'MCD', name: "McDonald's Corporation", sector: 'Restauración', category: 'CONSUMER', basePrice: 288.90 },
   { symbol: 'SBUX', name: 'Starbucks Corporation', sector: 'Restauración', category: 'CONSUMER', basePrice: 93.60 },
+  { symbol: 'ITX.MC', name: 'Inditex (Zara, Bershka, Pull&Bear)', sector: 'Moda Retail', category: 'CONSUMER', basePrice: 48.90 },
+  { symbol: 'MC.PA', name: 'LVMH Moët Hennessy Louis Vuitton', sector: 'Moda de Lujo', category: 'CONSUMER', basePrice: 618.00 },
+  { symbol: 'KER.PA', name: 'Kering SA (Gucci, Balenciaga)', sector: 'Moda de Lujo', category: 'CONSUMER', basePrice: 224.50 },
+  { symbol: 'OR.PA', name: "L'Oréal S.A.", sector: 'Cosmética & Belleza', category: 'CONSUMER', basePrice: 345.80 },
+  { symbol: 'RMS.PA', name: 'Hermès International SCA', sector: 'Moda de Lujo', category: 'CONSUMER', basePrice: 2050.00 },
+  { symbol: 'COST', name: 'Costco Wholesale Corporation', sector: 'Supermercados & Retail', category: 'CONSUMER', basePrice: 912.40 },
+  { symbol: 'WMT', name: 'Walmart Inc.', sector: 'Supermercados & Retail', category: 'CONSUMER', basePrice: 88.60 },
+  { symbol: 'TGT', name: 'Target Corporation', sector: 'Comercio Retail', category: 'CONSUMER', basePrice: 132.50 },
+  { symbol: 'PG', name: 'The Procter & Gamble Company', sector: 'Higiene & Consumo', category: 'CONSUMER', basePrice: 168.90 },
+  { symbol: 'MNST', name: 'Monster Beverage Corporation', sector: 'Bebidas Energéticas', category: 'CONSUMER', basePrice: 51.30 },
+  { symbol: 'ABNB', name: 'Airbnb, Inc.', sector: 'Viajes & Alquiler', category: 'CONSUMER', basePrice: 134.80 },
+  { symbol: 'BKNG', name: 'Booking Holdings Inc.', sector: 'Viajes & Hoteles', category: 'CONSUMER', basePrice: 4850.00 },
+  { symbol: 'UBER', name: 'Uber Technologies, Inc.', sector: 'Movilidad & Delivery', category: 'CONSUMER', basePrice: 72.40 },
+  { symbol: 'LULU', name: 'Lululemon Athletica Inc.', sector: 'Moda Deportiva', category: 'CONSUMER', basePrice: 318.00 },
+
+  // --- Banca & Finanzas ---
+  { symbol: 'SAN.MC', name: 'Banco Santander S.A.', sector: 'Banca', category: 'BANKING', basePrice: 4.45 },
+  { symbol: 'BBVA.MC', name: 'BBVA S.A.', sector: 'Banca', category: 'BANKING', basePrice: 9.35 },
+  { symbol: 'CABK.MC', name: 'CaixaBank S.A.', sector: 'Banca', category: 'BANKING', basePrice: 5.25 },
+  { symbol: 'JPM', name: 'JPMorgan Chase & Co.', sector: 'Banca Internacional', category: 'BANKING', basePrice: 238.40 },
+  { symbol: 'BAC', name: 'Bank of America Corporation', sector: 'Banca', category: 'BANKING', basePrice: 45.10 },
+  { symbol: 'GS', name: 'The Goldman Sachs Group, Inc.', sector: 'Banca de Inversión', category: 'BANKING', basePrice: 582.00 },
+  { symbol: 'MS', name: 'Morgan Stanley', sector: 'Banca de Inversión', category: 'BANKING', basePrice: 128.40 },
+  { symbol: 'V', name: 'Visa Inc.', sector: 'Redes de Pago', category: 'BANKING', basePrice: 304.50 },
+  { symbol: 'MA', name: 'Mastercard Incorporated', sector: 'Redes de Pago', category: 'BANKING', basePrice: 518.20 },
+  { symbol: 'PYPL', name: 'PayPal Holdings, Inc.', sector: 'Pagos Digitales', category: 'BANKING', basePrice: 84.60 },
+  { symbol: 'AXP', name: 'American Express Company', sector: 'Tarjetas & Finanzas', category: 'BANKING', basePrice: 284.10 },
+  { symbol: 'BLK', name: 'BlackRock, Inc.', sector: 'Gestión de Activos', category: 'BANKING', basePrice: 994.00 },
+  { symbol: 'BRK-B', name: 'Berkshire Hathaway Inc.', sector: 'Holding Inversiones', category: 'BANKING', basePrice: 452.30 },
+
+  // --- Energía & Aeroespacial ---
+  { symbol: 'REP.MC', name: 'Repsol S.A.', sector: 'Petróleo & Energía', category: 'ENERGY', basePrice: 12.40 },
+  { symbol: 'IBE.MC', name: 'Iberdrola S.A.', sector: 'Energía Renovable', category: 'ENERGY', basePrice: 13.20 },
+  { symbol: 'XOM', name: 'Exxon Mobil Corporation', sector: 'Petróleo & Gas', category: 'ENERGY', basePrice: 118.50 },
+  { symbol: 'CVX', name: 'Chevron Corporation', sector: 'Petróleo & Gas', category: 'ENERGY', basePrice: 154.20 },
+  { symbol: 'SHEL', name: 'Shell plc', sector: 'Petróleo & Gas', category: 'ENERGY', basePrice: 32.80 },
+  { symbol: 'TTE', name: 'TotalEnergies SE', sector: 'Energía & Combustibles', category: 'ENERGY', basePrice: 58.40 },
+  { symbol: 'BA', name: 'The Boeing Company', sector: 'Aeroespacial & Defensa', category: 'ENERGY', basePrice: 152.60 },
+  { symbol: 'AIR.PA', name: 'Airbus SE', sector: 'Aeroespacial & Defensa', category: 'ENERGY', basePrice: 138.90 },
+  { symbol: 'CAT', name: 'Caterpillar Inc.', sector: 'Maquinaria Pesada', category: 'ENERGY', basePrice: 388.50 },
+  { symbol: 'LMT', name: 'Lockheed Martin Corporation', sector: 'Defensa & Militar', category: 'ENERGY', basePrice: 540.20 },
 
   // --- Índices & ETFs Globales ---
   { symbol: 'SPY', name: 'SPDR S&P 500 ETF Trust', sector: 'ETF S&P 500', category: 'INDICES', basePrice: 562.30 },
   { symbol: 'QQQ', name: 'Invesco QQQ Trust (Nasdaq 100)', sector: 'ETF Nasdaq 100', category: 'INDICES', basePrice: 478.10 },
-  { symbol: 'GLD', name: 'SPDR Gold Shares (Oro)', sector: 'ETF Oro', category: 'INDICES', basePrice: 232.40 },
-
-  // --- Bolsa Española (IBEX 35) ---
-  { symbol: 'SAN.MC', name: 'Banco Santander S.A.', sector: 'Banca', category: 'BANKING', basePrice: 4.45 },
-  { symbol: 'BBVA.MC', name: 'BBVA S.A.', sector: 'Banca', category: 'BANKING', basePrice: 9.35 },
-  { symbol: 'ITX.MC', name: 'Inditex (Zara, Bershka, Pull&Bear)', sector: 'Moda Retail', category: 'CONSUMER', basePrice: 48.90 },
-  { symbol: 'IBE.MC', name: 'Iberdrola S.A.', sector: 'Energía', category: 'ENERGY', basePrice: 13.20 },
-  { symbol: 'REP.MC', name: 'Repsol S.A.', sector: 'Petróleo & Energía', category: 'ENERGY', basePrice: 12.40 },
-  { symbol: 'TEF.MC', name: 'Telefónica S.A.', sector: 'Telecomunicaciones', category: 'MEDIA', basePrice: 4.15 },
-  { symbol: 'CABK.MC', name: 'CaixaBank S.A.', sector: 'Banca', category: 'BANKING', basePrice: 5.25 },
+  { symbol: 'GLD', name: 'SPDR Gold Shares (Oro Físico)', sector: 'ETF Oro', category: 'INDICES', basePrice: 232.40 },
+  { symbol: 'SLV', name: 'iShares Silver Trust (Plata)', sector: 'ETF Plata', category: 'INDICES', basePrice: 28.50 },
+  { symbol: 'USO', name: 'United States Oil Fund (Petróleo)', sector: 'ETF Petróleo', category: 'INDICES', basePrice: 72.10 },
+  { symbol: 'DIA', name: 'SPDR Dow Jones Industrial Average', sector: 'ETF Dow Jones 30', category: 'INDICES', basePrice: 432.80 },
+  { symbol: 'IWM', name: 'iShares Russell 2000 ETF', sector: 'ETF Pequeñas Empresas', category: 'INDICES', basePrice: 218.40 },
+  { symbol: 'VTI', name: 'Vanguard Total Stock Market ETF', sector: 'ETF Mercado Total EE.UU.', category: 'INDICES', basePrice: 278.90 },
 ];
 
 export const MARKET_CATEGORIES = [
@@ -88,25 +172,25 @@ export function mapYahooToCategory(item: { sector?: string; industry?: string; t
   if (typ === 'etf' || sym === 'SPY' || sym === 'QQQ' || sym === 'GLD' || sym.includes('ETF')) {
     return 'INDICES';
   }
-  if (ind.includes('gaming') || ind.includes('game') || ind.includes('multimedia') || ['TTWO', 'EA', 'UBI.PA', 'RBLX', 'SONY', 'NTDOY', 'CDR.WA'].includes(sym)) {
+  if (ind.includes('gaming') || ind.includes('game') || ind.includes('multimedia') || ['TTWO', 'EA', 'UBI.PA', 'RBLX', 'SONY', 'NTDOY', 'CDR.WA', 'U', 'CCOEY', 'SGAMY', 'KNAMF', 'APP'].includes(sym)) {
     return 'GAMING';
   }
-  if (ind.includes('auto') || ind.includes('vehicle') || ['TSLA', 'RACE', 'F', 'GM', 'BMW3.DE', 'P911.DE'].includes(sym)) {
+  if (ind.includes('auto') || ind.includes('vehicle') || ['TSLA', 'RACE', 'F', 'GM', 'BMW3.DE', 'P911.DE', 'MBG.DE', 'VOW3.DE', 'STLA', 'TM', 'HMC', 'RIVN', 'LCID'].includes(sym)) {
     return 'AUTO';
   }
-  if (ind.includes('entertainment') || ind.includes('broadcasting') || ind.includes('streaming') || ind.includes('telecom') || ['NFLX', 'DIS', 'SPOT', 'WBD', 'TEF.MC'].includes(sym)) {
+  if (ind.includes('entertainment') || ind.includes('broadcasting') || ind.includes('streaming') || ind.includes('telecom') || ['NFLX', 'DIS', 'SPOT', 'WBD', 'PARA', 'CMCSA', 'TEF.MC', 'T', 'VZ', 'ROKU'].includes(sym)) {
     return 'MEDIA';
   }
-  if (sec.includes('financial') || ind.includes('bank') || ind.includes('credit') || ['SAN.MC', 'BBVA.MC', 'CABK.MC', 'JPM', 'BAC', 'V', 'MA'].includes(sym)) {
+  if (sec.includes('financial') || ind.includes('bank') || ind.includes('credit') || ['SAN.MC', 'BBVA.MC', 'CABK.MC', 'JPM', 'BAC', 'GS', 'MS', 'V', 'MA', 'PYPL', 'AXP', 'BLK', 'BRK-B'].includes(sym)) {
     return 'BANKING';
   }
-  if (sec.includes('energy') || sec.includes('utilities') || ind.includes('oil') || ind.includes('gas') || ['REP.MC', 'IBE.MC', 'XOM', 'CVX'].includes(sym)) {
+  if (sec.includes('energy') || sec.includes('utilities') || ind.includes('oil') || ind.includes('gas') || ind.includes('defense') || ind.includes('aerospace') || ['REP.MC', 'IBE.MC', 'XOM', 'CVX', 'SHEL', 'TTE', 'BA', 'AIR.PA', 'CAT', 'LMT'].includes(sym)) {
     return 'ENERGY';
   }
-  if (sec.includes('consumer') || ind.includes('retail') || ind.includes('apparel') || ind.includes('beverage') || ind.includes('restaurant') || ['NKE', 'KO', 'PEP', 'MCD', 'SBUX', 'ITX.MC', 'MC.PA'].includes(sym)) {
+  if (sec.includes('consumer') || ind.includes('retail') || ind.includes('apparel') || ind.includes('beverage') || ind.includes('restaurant') || ['NKE', 'KO', 'PEP', 'MCD', 'SBUX', 'ITX.MC', 'MC.PA', 'KER.PA', 'OR.PA', 'RMS.PA', 'COST', 'WMT', 'TGT', 'PG', 'MNST', 'ABNB', 'BKNG', 'UBER', 'LULU'].includes(sym)) {
     return 'CONSUMER';
   }
-  if (sec.includes('technology') || ind.includes('semiconductor') || ind.includes('software') || ind.includes('electronics') || ['NVDA', 'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'AMD', 'PLTR', 'INTC', 'TSM'].includes(sym)) {
+  if (sec.includes('technology') || ind.includes('semiconductor') || ind.includes('software') || ind.includes('electronics') || ['NVDA', 'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'AMD', 'PLTR', 'INTC', 'TSM', 'ARM', 'AVGO', 'QCOM', 'ASML', 'CRM', 'ADBE', 'ORCL', 'IBM', 'NOW', 'PANW', 'CRWD', 'DELL', 'SMCI', 'MU'].includes(sym)) {
     return 'TECH';
   }
   return 'TECH';
