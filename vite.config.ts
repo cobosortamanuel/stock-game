@@ -1,5 +1,41 @@
 import { defineConfig, Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+import fs from 'fs'
+import path from 'path'
+
+const BUILD_ID = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}`
+
+function versionPlugin(): Plugin {
+  return {
+    name: 'version-generator-plugin',
+    buildStart() {
+      const publicDir = path.resolve(__dirname, 'public')
+      const versionFile = path.join(publicDir, 'version.json')
+      const versionData = {
+        buildId: BUILD_ID,
+        buildTime: Date.now()
+      }
+      try {
+        if (!fs.existsSync(publicDir)) {
+          fs.mkdirSync(publicDir, { recursive: true })
+        }
+        fs.writeFileSync(versionFile, JSON.stringify(versionData, null, 2))
+      } catch (e) {
+        console.warn('Could not write version.json to public:', e)
+      }
+    },
+    generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'version.json',
+        source: JSON.stringify({
+          buildId: BUILD_ID,
+          buildTime: Date.now()
+        }, null, 2)
+      })
+    }
+  }
+}
 
 // Custom dev-server proxy plugin for Yahoo Finance market data
 function yahooFinanceProxy(): Plugin {
@@ -55,7 +91,10 @@ function yahooFinanceProxy(): Plugin {
 // https://vite.dev/config/
 export default defineConfig({
   base: './', // Relative paths for GitHub Pages compatibility
-  plugins: [react(), yahooFinanceProxy()],
+  plugins: [react(), yahooFinanceProxy(), versionPlugin()],
+  define: {
+    __APP_BUILD_ID__: JSON.stringify(BUILD_ID),
+  },
   server: {
     host: true, // Allow mobile devices on same Wi-Fi to connect
     port: 5173

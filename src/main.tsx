@@ -2,6 +2,10 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App'
+import { initVersionChecker } from './services/versionChecker'
+
+// Initialize Auto-Update version detection
+initVersionChecker();
 
 // Register Service Worker with dynamic base path for GitHub Pages / custom domains
 if ('serviceWorker' in navigator) {
