@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Moon, Sun, RotateCcw, Smartphone, Cloud, UploadCloud, DownloadCloud, Copy, Check, Loader2, Download, FolderKanban, PlusCircle } from 'lucide-react';
+import { Moon, Sun, RotateCcw, FolderKanban } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { formatCurrency } from '../services/marketApi';
 
@@ -7,8 +7,6 @@ export const SettingsView: React.FC = () => {
   const {
     isDarkMode,
     toggleDarkMode,
-    isInstallable,
-    installApp,
     initialCash,
     resetAccount,
     activeGameName,
@@ -32,28 +30,6 @@ export const SettingsView: React.FC = () => {
 
   return (
     <div className="space-y-4 pb-24 max-w-md mx-auto px-4 pt-2">
-      {/* 1-Click Install Card if available */}
-      {isInstallable && (
-        <div className="bg-gradient-to-r from-ios-blue to-indigo-600 text-white rounded-3xl p-4 shadow-lg flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center">
-              <Download className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <span className="text-sm font-bold block">Instalar en tu Android</span>
-              <span className="text-xs text-white/80">Juega a pantalla completa como app</span>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={installApp}
-            className="py-2 px-3.5 rounded-xl bg-white text-ios-blue font-bold text-xs shadow-md ios-active"
-          >
-            Instalar
-          </button>
-        </div>
-      )}
-
       {/* Active Game & Multi-Save Lobby Switcher */}
       <div className="bg-white dark:bg-ios-card-dark rounded-3xl p-5 border border-black/5 dark:border-white/5 shadow-ios-sm space-y-3">
         <div className="flex items-center justify-between">
@@ -226,24 +202,6 @@ export const SettingsView: React.FC = () => {
             </p>
           </div>
         </div>
-      </div>
-
-      {/* Android Mobile Install Instructions */}
-      <div className="bg-white dark:bg-ios-card-dark rounded-3xl p-5 border border-black/5 dark:border-white/5 shadow-ios-sm">
-        <div className="flex items-center gap-2 mb-2">
-          <Smartphone className="w-4 h-4 text-ios-blue" />
-          <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-400">
-            Jugar en tu Móvil Android
-          </h2>
-        </div>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
-          Para instalar como aplicación en tu pantalla principal:
-        </p>
-        <ol className="mt-2 space-y-1.5 text-xs text-zinc-600 dark:text-zinc-300 list-decimal list-inside">
-          <li>Abre el enlace en Google Chrome en tu móvil Android.</li>
-          <li>Pulsa en el menú (tres puntos arriba a la derecha).</li>
-          <li>Selecciona <strong>"Añadir a pantalla de inicio"</strong>.</li>
-        </ol>
       </div>
     </div>
   );
