@@ -8,7 +8,7 @@ interface MarketsViewProps {
   onOpenSearch: () => void;
 }
 
-type MarketCategory = 'ALL' | 'TECH' | 'CRYPTO' | 'INDICES' | 'SPAIN' | 'GAINERS' | 'LOSERS';
+type MarketCategory = 'ALL' | 'TECH' | 'GAMING' | 'CRYPTO' | 'AUTO' | 'MEDIA' | 'CONSUMER' | 'INDICES' | 'SPAIN' | 'GAINERS' | 'LOSERS';
 
 export const MarketsView: React.FC<MarketsViewProps> = ({
   onSelectSymbol,
@@ -19,28 +19,40 @@ export const MarketsView: React.FC<MarketsViewProps> = ({
 
   const categories = [
     { id: 'ALL' as MarketCategory, label: 'Todo' },
-    { id: 'TECH' as MarketCategory, label: 'Tecnología' },
-    { id: 'CRYPTO' as MarketCategory, label: 'Criptomonedas' },
-    { id: 'INDICES' as MarketCategory, label: 'Índices' },
-    { id: 'SPAIN' as MarketCategory, label: 'España / UE' },
-    { id: 'GAINERS' as MarketCategory, label: 'Top Ganadoras' },
-    { id: 'LOSERS' as MarketCategory, label: 'Top Perdedoras' },
+    { id: 'TECH' as MarketCategory, label: 'Tecnología e IA' },
+    { id: 'GAMING' as MarketCategory, label: 'Videojuegos' },
+    { id: 'CRYPTO' as MarketCategory, label: 'Criptomonedas (24/7)' },
+    { id: 'AUTO' as MarketCategory, label: 'Automotriz' },
+    { id: 'MEDIA' as MarketCategory, label: 'Streaming y Cine' },
+    { id: 'CONSUMER' as MarketCategory, label: 'Consumo y Moda' },
+    { id: 'SPAIN' as MarketCategory, label: 'España (IBEX 35)' },
+    { id: 'INDICES' as MarketCategory, label: 'Índices y Oro' },
+    { id: 'GAINERS' as MarketCategory, label: 'Subiendo hoy' },
+    { id: 'LOSERS' as MarketCategory, label: 'Bajando hoy' },
   ];
 
   // Filter symbols based on category
-  const filteredSymbols = POPULAR_SYMBOLS.filter((stock) => {
+  const filteredSymbols = POPULAR_SYMBOLS.filter((stock: any) => {
     const quote = liveQuotes[stock.symbol];
     const change = quote ? quote.changePercent : 0;
 
     switch (selectedCategory) {
       case 'TECH':
-        return ['NVDA', 'AAPL', 'MSFT', 'AMZN', 'GOOGL', 'META', 'AMD', 'PLTR'].includes(stock.symbol);
+        return stock.category === 'TECH';
+      case 'GAMING':
+        return stock.category === 'GAMING';
       case 'CRYPTO':
-        return ['BTC-USD', 'ETH-USD'].includes(stock.symbol);
+        return stock.category === 'CRYPTO';
+      case 'AUTO':
+        return stock.category === 'AUTO';
+      case 'MEDIA':
+        return stock.category === 'MEDIA';
+      case 'CONSUMER':
+        return stock.category === 'CONSUMER';
       case 'INDICES':
-        return ['SPY', 'QQQ'].includes(stock.symbol);
+        return stock.category === 'INDICES';
       case 'SPAIN':
-        return ['SAN.MC', 'ITX.MC'].includes(stock.symbol);
+        return stock.category === 'SPAIN';
       case 'GAINERS':
         return change > 0;
       case 'LOSERS':
@@ -57,14 +69,14 @@ export const MarketsView: React.FC<MarketsViewProps> = ({
       <button
         type="button"
         onClick={onOpenSearch}
-        className="w-full p-3 rounded-2xl bg-white dark:bg-zinc-900 border border-black/5 dark:border-white/5 flex items-center justify-between text-zinc-400 text-sm shadow-ios-sm ios-active"
+        className="w-full p-3.5 rounded-3xl bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-900 dark:to-zinc-950 border border-black/5 dark:border-white/10 flex items-center justify-between text-zinc-400 text-sm shadow-ios-sm ios-active"
       >
         <div className="flex items-center gap-2.5">
           <Search className="w-4 h-4 text-zinc-400" />
           <span>Buscar cualquier empresa del mundo...</span>
         </div>
         <span className="text-[11px] px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 font-mono text-zinc-500">
-          AAPL, TSLA...
+          AAPL, TSLA, BTC...
         </span>
       </button>
 
@@ -99,34 +111,34 @@ export const MarketsView: React.FC<MarketsViewProps> = ({
           return (
             <div
               key={item.symbol}
-              className="w-full bg-white dark:bg-ios-card-dark rounded-2xl p-3.5 border border-black/5 dark:border-white/5 flex items-center justify-between shadow-ios-sm hover:border-ios-blue/40 transition-all"
+              className="w-full bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-900 dark:to-zinc-950 rounded-3xl p-3.5 border border-black/5 dark:border-white/10 flex items-center justify-between shadow-ios-sm hover:border-ios-blue/40 transition-all"
             >
               {/* Left: Ticker, Name, Sector */}
               <button
                 type="button"
                 onClick={() => onSelectSymbol(item.symbol)}
-                className="flex items-center gap-3 text-left flex-1 group"
+                className="flex items-center gap-3 text-left flex-1 group mr-2"
               >
-                <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center font-bold text-xs text-zinc-800 dark:text-zinc-200 border border-black/5 dark:border-white/5 group-hover:border-ios-blue transition-colors">
+                <div className="w-10 h-10 rounded-2xl bg-zinc-100 dark:bg-zinc-800/80 flex items-center justify-center font-bold text-xs text-zinc-800 dark:text-zinc-200 border border-black/5 dark:border-white/5 group-hover:border-ios-blue transition-colors">
                   {item.symbol.substring(0, 4)}
                 </div>
-                <div>
+                <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-sm text-zinc-900 dark:text-zinc-50">
+                    <span className="font-bold text-sm text-zinc-900 dark:text-zinc-50 truncate">
                       {item.symbol}
                     </span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 font-medium">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-500 font-medium shrink-0">
                       {item.sector}
                     </span>
                   </div>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate max-w-[140px] sm:max-w-[190px]">
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
                     {item.name}
                   </p>
                 </div>
               </button>
 
               {/* Right: Price, Change Pill & Star */}
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2.5 shrink-0">
                 <button
                   type="button"
                   onClick={() => onSelectSymbol(item.symbol)}
@@ -147,7 +159,7 @@ export const MarketsView: React.FC<MarketsViewProps> = ({
                 <button
                   type="button"
                   onClick={() => toggleWatchlist(item.symbol)}
-                  className="p-1 text-zinc-400 hover:text-amber-400 ios-active"
+                  className="p-1.5 text-zinc-400 hover:text-amber-400 ios-active"
                   aria-label="Favorito"
                 >
                   <Star

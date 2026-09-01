@@ -1,26 +1,63 @@
 import { StockQuote, ChartPoint, TimeRange, SearchResult } from '../types/market';
 
 export const POPULAR_SYMBOLS = [
-  { symbol: 'TTWO', name: 'Take-Two Interactive Software, Inc.', sector: 'Videojuegos / GTA', basePrice: 219.70 },
-  { symbol: 'NVDA', name: 'NVIDIA Corporation', sector: 'Semiconductores', basePrice: 128.50 },
-  { symbol: 'AAPL', name: 'Apple Inc.', sector: 'Tecnología', basePrice: 224.20 },
-  { symbol: 'TSLA', name: 'Tesla, Inc.', sector: 'Automotriz', basePrice: 367.95 },
-  { symbol: 'MSFT', name: 'Microsoft Corporation', sector: 'Software', basePrice: 418.50 },
-  { symbol: 'AMZN', name: 'Amazon.com, Inc.', sector: 'Comercio Electrónico', basePrice: 178.40 },
-  { symbol: 'GOOGL', name: 'Alphabet Inc.', sector: 'Internet', basePrice: 164.30 },
-  { symbol: 'META', name: 'Meta Platforms, Inc.', sector: 'Redes Sociales', basePrice: 512.90 },
-  { symbol: 'AMD', name: 'Advanced Micro Devices', sector: 'Semiconductores', basePrice: 146.70 },
-  { symbol: 'PLTR', name: 'Palantir Technologies', sector: 'Inteligencia Artificial', basePrice: 31.40 },
-  { symbol: 'BTC-USD', name: 'Bitcoin (USD)', sector: 'Criptomonedas', basePrice: 78626.00 },
-  { symbol: 'ETH-USD', name: 'Ethereum (USD)', sector: 'Criptomonedas', basePrice: 2540.00 },
-  { symbol: 'NFLX', name: 'Netflix, Inc.', sector: 'Streaming / Entretenimiento', basePrice: 685.20 },
-  { symbol: 'COIN', name: 'Coinbase Global, Inc.', sector: 'Criptomonedas Exchange', basePrice: 218.60 },
-  { symbol: 'DIS', name: 'The Walt Disney Company', sector: 'Entretenimiento', basePrice: 94.80 },
-  { symbol: 'EA', name: 'Electronic Arts Inc.', sector: 'Videojuegos / Deportes', basePrice: 144.20 },
-  { symbol: 'SPY', name: 'SPDR S&P 500 ETF Trust', sector: 'Índices ETF', basePrice: 562.30 },
-  { symbol: 'QQQ', name: 'Invesco QQQ Trust (Nasdaq 100)', sector: 'Índices ETF', basePrice: 478.10 },
-  { symbol: 'SAN.MC', name: 'Banco Santander S.A.', sector: 'Banca Española', basePrice: 4.45 },
-  { symbol: 'ITX.MC', name: 'Industria de Diseño Textil (Inditex)', sector: 'Moda Retail', basePrice: 48.90 },
+  // --- Videojuegos & Gaming ---
+  { symbol: 'TTWO', name: 'Take-Two Interactive Software, Inc.', sector: 'Videojuegos / GTA', category: 'GAMING', basePrice: 219.70 },
+  { symbol: 'EA', name: 'Electronic Arts Inc.', sector: 'Videojuegos / EA Sports', category: 'GAMING', basePrice: 144.20 },
+  { symbol: 'RBLX', name: 'Roblox Corporation', sector: 'Metaverso / Gaming', category: 'GAMING', basePrice: 43.10 },
+  { symbol: 'SONY', name: 'Sony Group Corporation', sector: 'PlayStation / Cine', category: 'GAMING', basePrice: 92.50 },
+
+  // --- Big Tech & Inteligencia Artificial ---
+  { symbol: 'NVDA', name: 'NVIDIA Corporation', sector: 'IA / Chips GPU', category: 'TECH', basePrice: 128.50 },
+  { symbol: 'AAPL', name: 'Apple Inc.', sector: 'iPhone / Mac / Vision', category: 'TECH', basePrice: 224.20 },
+  { symbol: 'MSFT', name: 'Microsoft Corporation', sector: 'Windows / Azure / Xbox', category: 'TECH', basePrice: 418.50 },
+  { symbol: 'GOOGL', name: 'Alphabet Inc. (Google)', sector: 'Google / YouTube / Cloud', category: 'TECH', basePrice: 164.30 },
+  { symbol: 'AMZN', name: 'Amazon.com, Inc.', sector: 'Comercio / AWS Cloud', category: 'TECH', basePrice: 178.40 },
+  { symbol: 'META', name: 'Meta Platforms, Inc.', sector: 'Instagram / WhatsApp / VR', category: 'TECH', basePrice: 512.90 },
+  { symbol: 'AMD', name: 'Advanced Micro Devices', sector: 'Procesadores / IA', category: 'TECH', basePrice: 146.70 },
+  { symbol: 'PLTR', name: 'Palantir Technologies', sector: 'Software de Inteligencia', category: 'TECH', basePrice: 31.40 },
+  { symbol: 'INTC', name: 'Intel Corporation', sector: 'Semiconductores', category: 'TECH', basePrice: 20.80 },
+  { symbol: 'TSM', name: 'Taiwan Semiconductor Manufacturing', sector: 'Fundición de Chips', category: 'TECH', basePrice: 172.10 },
+
+  // --- Criptomonedas (24 Horas / 7 Días) ---
+  { symbol: 'BTC-USD', name: 'Bitcoin (USD)', sector: 'Criptomoneda Lider', category: 'CRYPTO', basePrice: 78626.00 },
+  { symbol: 'ETH-USD', name: 'Ethereum (USD)', sector: 'Smart Contracts', category: 'CRYPTO', basePrice: 2540.00 },
+  { symbol: 'SOL-USD', name: 'Solana (USD)', sector: 'Blockchain de Alta Velocidad', category: 'CRYPTO', basePrice: 138.50 },
+  { symbol: 'BNB-USD', name: 'Binance Coin (USD)', sector: 'Ecosistema Binance', category: 'CRYPTO', basePrice: 542.00 },
+  { symbol: 'XRP-USD', name: 'Ripple XRP (USD)', sector: 'Pagos Transfronterizos', category: 'CRYPTO', basePrice: 0.58 },
+  { symbol: 'DOGE-USD', name: 'Dogecoin (USD)', sector: 'Memecoin de Red', category: 'CRYPTO', basePrice: 0.10 },
+  { symbol: 'COIN', name: 'Coinbase Global, Inc.', sector: 'Crypto Exchange', category: 'CRYPTO', basePrice: 218.60 },
+
+  // --- Automotriz & Movilidad ---
+  { symbol: 'TSLA', name: 'Tesla, Inc.', sector: 'Vehículos Eléctricos / IA', category: 'AUTO', basePrice: 367.95 },
+  { symbol: 'RACE', name: 'Ferrari N.V.', sector: 'Superdeportivos de Lujo', category: 'AUTO', basePrice: 448.20 },
+  { symbol: 'F', name: 'Ford Motor Company', sector: 'Automóviles', category: 'AUTO', basePrice: 10.90 },
+
+  // --- Entretenimiento & Streaming ---
+  { symbol: 'NFLX', name: 'Netflix, Inc.', sector: 'Streaming de Películas', category: 'MEDIA', basePrice: 685.20 },
+  { symbol: 'DIS', name: 'The Walt Disney Company', sector: 'Parques / Cine / Disney+', category: 'MEDIA', basePrice: 94.80 },
+  { symbol: 'SPOT', name: 'Spotify Technology S.A.', sector: 'Streaming de Música', category: 'MEDIA', basePrice: 342.10 },
+
+  // --- Consumo Global & Moda ---
+  { symbol: 'NKE', name: 'Nike, Inc.', sector: 'Moda Deportiva', category: 'CONSUMER', basePrice: 82.40 },
+  { symbol: 'KO', name: 'The Coca-Cola Company', sector: 'Bebidas Globales', category: 'CONSUMER', basePrice: 69.80 },
+  { symbol: 'PEP', name: 'PepsiCo, Inc.', sector: 'Bebidas y Snacks', category: 'CONSUMER', basePrice: 174.50 },
+  { symbol: 'MCD', name: "McDonald's Corporation", sector: 'Restauración Rápida', category: 'CONSUMER', basePrice: 288.90 },
+  { symbol: 'SBUX', name: 'Starbucks Corporation', sector: 'Cafeterías', category: 'CONSUMER', basePrice: 93.60 },
+
+  // --- Índices & ETFs Globales ---
+  { symbol: 'SPY', name: 'SPDR S&P 500 ETF Trust', sector: 'Top 500 Empresas EE.UU.', category: 'INDICES', basePrice: 562.30 },
+  { symbol: 'QQQ', name: 'Invesco QQQ Trust (Nasdaq 100)', sector: 'Top 100 Empresas Tech', category: 'INDICES', basePrice: 478.10 },
+  { symbol: 'GLD', name: 'SPDR Gold Shares (Oro)', sector: 'Oro Físico ETF', category: 'INDICES', basePrice: 232.40 },
+
+  // --- Bolsa Española (IBEX 35) ---
+  { symbol: 'SAN.MC', name: 'Banco Santander S.A.', sector: 'Banca Internacional', category: 'SPAIN', basePrice: 4.45 },
+  { symbol: 'BBVA.MC', name: 'BBVA S.A.', sector: 'Banca y Finanzas', category: 'SPAIN', basePrice: 9.35 },
+  { symbol: 'ITX.MC', name: 'Inditex (Zara, Bershka, Pull&Bear)', sector: 'Moda Retail Global', category: 'SPAIN', basePrice: 48.90 },
+  { symbol: 'IBE.MC', name: 'Iberdrola S.A.', sector: 'Energías Renovables', category: 'SPAIN', basePrice: 13.20 },
+  { symbol: 'REP.MC', name: 'Repsol S.A.', sector: 'Energía y Petróleo', category: 'SPAIN', basePrice: 12.40 },
+  { symbol: 'TEF.MC', name: 'Telefónica S.A.', sector: 'Telecomunicaciones (Movistar)', category: 'SPAIN', basePrice: 4.15 },
+  { symbol: 'CABK.MC', name: 'CaixaBank S.A.', sector: 'Banca Española', category: 'SPAIN', basePrice: 5.25 },
 ];
 
 const SUPABASE_PROJECT_URL = 'https://vvxfewktdsltzsxfumio.supabase.co';
@@ -175,8 +212,8 @@ export async function fetchStockData(
             marketCap: meta.marketCap ? formatCurrency(meta.marketCap, 'USD', true) : 'N/A',
             week52High: meta.fiftyTwoWeekHigh,
             week52Low: meta.fiftyTwoWeekLow,
-            currency: meta.currency || 'USD',
-            exchange: meta.exchangeName || 'NASDAQ',
+            currency: meta.currency || (cleanSymbol.endsWith('.MC') ? 'EUR' : 'USD'),
+            exchange: meta.exchangeName || (cleanSymbol.endsWith('.MC') ? 'BME' : 'NASDAQ'),
             historicalChanges: {
               '1H': Number((changePercent * 0.2).toFixed(2)),
               '1D': Number(changePercent.toFixed(2)),
@@ -198,7 +235,7 @@ export async function fetchStockData(
     }
   }
 
-  // If live market feeds are completely unreachable, return null so no fake price or chart is invented
+  // If live market feeds are completely unreachable, return null
   return null;
 }
 
@@ -209,22 +246,22 @@ export async function searchSymbols(query: string): Promise<SearchResult[]> {
 
   const lowerQ = cleanQ.toLowerCase();
   const matchedPopular = POPULAR_SYMBOLS
-    .filter(s => s.symbol.toLowerCase().includes(lowerQ) || s.name.toLowerCase().includes(lowerQ))
+    .filter(s => s.symbol.toLowerCase().includes(lowerQ) || s.name.toLowerCase().includes(lowerQ) || s.sector.toLowerCase().includes(lowerQ))
     .map(s => ({
       symbol: s.symbol,
       name: s.name,
-      exchange: s.symbol.endsWith('.MC') ? 'BME' : 'NASDAQ',
+      exchange: s.symbol.endsWith('.MC') ? 'BME' : s.category === 'CRYPTO' ? 'CRYPTO' : 'NASDAQ',
       type: 'EQUITY'
     }));
 
   const uppercaseQuery = cleanQ.toUpperCase();
-  if (/^[A-Z0-9.\-]{1,6}$/.test(uppercaseQuery)) {
+  if (/^[A-Z0-9.\-]{1,8}$/.test(uppercaseQuery)) {
     const alreadyFound = matchedPopular.some(m => m.symbol === uppercaseQuery);
     if (!alreadyFound) {
       matchedPopular.unshift({
         symbol: uppercaseQuery,
-        name: uppercaseQuery === 'TTWO' ? 'Take-Two Interactive Software, Inc.' : `${uppercaseQuery} Corporation`,
-        exchange: 'NASDAQ',
+        name: `${uppercaseQuery} Market Asset`,
+        exchange: uppercaseQuery.endsWith('.MC') ? 'BME' : 'NASDAQ',
         type: 'EQUITY'
       });
     }
@@ -233,7 +270,7 @@ export async function searchSymbols(query: string): Promise<SearchResult[]> {
   try {
     const targetYahooSearchUrl = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(cleanQ)}`;
     const searchUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetYahooSearchUrl)}`;
-    const response = await fetch(searchUrl, { signal: AbortSignal.timeout(2000) });
+    const response = await fetch(searchUrl, { signal: AbortSignal.timeout(2500) });
     if (response.ok) {
       const data = await response.json();
       if (data?.quotes && Array.isArray(data.quotes)) {
