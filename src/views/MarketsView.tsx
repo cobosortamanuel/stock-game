@@ -100,7 +100,7 @@ export const MarketsView: React.FC<MarketsViewProps> = ({
       >
         <div className="flex items-center gap-2.5">
           <Search className="w-4 h-4 text-zinc-400" />
-          <span>Buscar cualquier empresa del mundo...</span>
+          <span>Buscar...</span>
         </div>
         <span className="text-[11px] px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 font-mono text-zinc-500">
           AAPL, TSLA, BTC...
