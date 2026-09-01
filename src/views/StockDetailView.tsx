@@ -101,26 +101,35 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
 
       {/* Interactive Chart Section or Error */}
       {hasError && !isLoading ? (
-        <div className="bg-white dark:bg-ios-card-dark rounded-3xl p-8 border border-black/5 dark:border-white/5 shadow-ios text-center space-y-3">
+        <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 border border-black/5 dark:border-white/5 shadow-ios text-center space-y-3">
           <div className="w-12 h-12 rounded-full bg-ios-orange/15 text-ios-orange flex items-center justify-center mx-auto">
             <ShieldAlert className="w-6 h-6" />
           </div>
           <div>
             <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-50">
-              Mercado en directo no disponible
+              Símbolo no encontrado en los mercados
             </h3>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 max-w-xs mx-auto leading-relaxed">
-              No se ha podido conectar con la cotización en tiempo real de {symbol}. Las operaciones están pausadas por seguridad.
+              No se ha encontrado cotización para "{symbol}". Comprueba que el ticker sea correcto o vuelve a la lista de mercados.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={loadData}
-            className="py-2.5 px-4 rounded-2xl bg-ios-blue text-white text-xs font-bold shadow-md ios-active inline-flex items-center gap-1.5"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>Reintentar Conexión</span>
-          </button>
+          <div className="flex items-center justify-center gap-2 pt-1">
+            <button
+              type="button"
+              onClick={onBack}
+              className="py-2.5 px-4 rounded-2xl bg-zinc-200 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 text-xs font-bold shadow-sm ios-active"
+            >
+              Volver a Mercados
+            </button>
+            <button
+              type="button"
+              onClick={loadData}
+              className="py-2.5 px-4 rounded-2xl bg-ios-blue text-white text-xs font-bold shadow-md ios-active inline-flex items-center gap-1.5"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Reintentar</span>
+            </button>
+          </div>
         </div>
       ) : (
         <div className="bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-900 dark:to-zinc-950 rounded-3xl p-4 border border-black/5 dark:border-white/10 shadow-ios">

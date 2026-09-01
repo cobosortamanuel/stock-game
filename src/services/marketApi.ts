@@ -4,6 +4,7 @@ export const POPULAR_SYMBOLS = [
   // --- Videojuegos & Gaming ---
   { symbol: 'TTWO', name: 'Take-Two Interactive Software, Inc.', sector: 'Videojuegos / GTA', category: 'GAMING', basePrice: 219.70 },
   { symbol: 'EA', name: 'Electronic Arts Inc.', sector: 'Videojuegos / EA Sports', category: 'GAMING', basePrice: 144.20 },
+  { symbol: 'UBI.PA', name: 'Ubisoft Entertainment SA', sector: 'Videojuegos / AC', category: 'GAMING', basePrice: 12.80 },
   { symbol: 'RBLX', name: 'Roblox Corporation', sector: 'Metaverso / Gaming', category: 'GAMING', basePrice: 43.10 },
   { symbol: 'SONY', name: 'Sony Group Corporation', sector: 'PlayStation / Cine', category: 'GAMING', basePrice: 92.50 },
 
