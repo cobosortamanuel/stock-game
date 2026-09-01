@@ -93,7 +93,7 @@ export const formatPercent = (value: number, includeSign: boolean = true): strin
 };
 
 function getTimeRangeParams(range: TimeRange, symbol: string): { range: string; interval: string } {
-  const isCrypto = symbol.includes('BTC') || symbol.includes('ETH') || symbol.includes('USD') || symbol.includes('CYBERLEEK');
+  const isCrypto = symbol.includes('BTC') || symbol.includes('ETH') || symbol.includes('USD');
   switch (range) {
     case '1H':
       return { range: '1d', interval: '2m' };
@@ -120,125 +120,111 @@ export async function fetchStockData(
   range: TimeRange = '1D'
 ): Promise<{ quote: StockQuote; chart: ChartPoint[] } | null> {
   const cleanSymbol = symbol.trim().toUpperCase();
-  const isCrypto = cleanSymbol.includes('BTC') || cleanSymbol.includes('ETH') || cleanSymbol.includes('USD') || cleanSymbol.includes('CYBERLEEK');
+  const isCrypto = cleanSymbol.includes('BTC') || cleanSymbol.includes('ETH') || cleanSymbol.includes('USD');
   const { range: apiRange, interval } = getTimeRangeParams(range, cleanSymbol);
 
   const supabaseFunctionUrl = `${SUPABASE_PROJECT_URL}/functions/v1/market?symbol=${encodeURIComponent(cleanSymbol)}&range=${apiRange}&interval=${interval}`;
-  const targetYahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanSymbol}?range=${apiRange}&interval=${interval}`;
 
-  const fetchConfigs = [
-    {
-      url: supabaseFunctionUrl,
+  try {
+    const response = await fetch(supabaseFunctionUrl, {
       headers: {
         'apikey': SUPABASE_ANON_KEY,
         'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
       },
-    },
-    {
-      url: `https://api.allorigins.win/raw?url=${encodeURIComponent(targetYahooUrl)}`,
-      headers: {},
-    },
-  ];
+      signal: AbortSignal.timeout(5000),
+    });
 
-  for (const config of fetchConfigs) {
-    try {
-      const response = await fetch(config.url, {
-        headers: config.headers,
-        signal: AbortSignal.timeout(4500),
-      });
+    if (response.ok) {
+      const data = await response.json();
+      const result = data?.chart?.result?.[0];
 
-      if (response.ok) {
-        const data = await response.json();
-        const result = data?.chart?.result?.[0];
+      if (result && result.meta) {
+        const meta = result.meta;
+        const currentPrice = meta.regularMarketPrice ?? meta.previousClose;
+        if (!currentPrice) return null;
 
-        if (result && result.meta) {
-          const meta = result.meta;
-          const currentPrice = meta.regularMarketPrice ?? meta.previousClose;
-          if (!currentPrice) continue;
+        const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? currentPrice;
+        const change = currentPrice - prevClose;
+        const changePercent = prevClose ? (change / prevClose) * 100 : 0;
 
-          const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? currentPrice;
-          const change = currentPrice - prevClose;
-          const changePercent = prevClose ? (change / prevClose) * 100 : 0;
+        const timestamps: number[] = result.timestamp || [];
+        const quotes = result.indicators?.quote?.[0] || {};
+        const closes: number[] = quotes.close || [];
+        const opens: number[] = quotes.open || [];
+        const highs: number[] = quotes.high || [];
+        const lows: number[] = quotes.low || [];
+        const volumes: number[] = quotes.volume || [];
 
-          const timestamps: number[] = result.timestamp || [];
-          const quotes = result.indicators?.quote?.[0] || {};
-          const closes: number[] = quotes.close || [];
-          const opens: number[] = quotes.open || [];
-          const highs: number[] = quotes.high || [];
-          const lows: number[] = quotes.low || [];
-          const volumes: number[] = quotes.volume || [];
+        let chartPoints: ChartPoint[] = [];
+        for (let i = 0; i < timestamps.length; i++) {
+          const rawClose = closes[i];
+          if (rawClose !== null && rawClose !== undefined && !isNaN(rawClose)) {
+            const ts = timestamps[i] * 1000;
+            const date = new Date(ts);
+            const dateStr =
+              range === '1H' || range === '1D'
+                ? date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+                : range === '1W' || range === '1M'
+                ? date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                : date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric', year: range === '5Y' || range === 'ALL' ? '2-digit' : undefined });
 
-          let chartPoints: ChartPoint[] = [];
-          for (let i = 0; i < timestamps.length; i++) {
-            const rawClose = closes[i];
-            if (rawClose !== null && rawClose !== undefined && !isNaN(rawClose)) {
-              const ts = timestamps[i] * 1000;
-              const date = new Date(ts);
-              const dateStr =
-                range === '1H' || range === '1D'
-                  ? date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-                  : range === '1W' || range === '1M'
-                  ? date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-                  : date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric', year: range === '5Y' || range === 'ALL' ? '2-digit' : undefined });
+            const precision = currentPrice < 0.01 ? 6 : currentPrice < 1 ? 4 : 2;
 
-              const precision = currentPrice < 0.01 ? 6 : currentPrice < 1 ? 4 : 2;
-
-              chartPoints.push({
-                timestamp: ts,
-                dateStr,
-                price: Number(rawClose.toFixed(precision)),
-                open: opens[i] ? Number(opens[i].toFixed(precision)) : Number(rawClose.toFixed(precision)),
-                high: highs[i] ? Number(highs[i].toFixed(precision)) : Number(rawClose.toFixed(precision)),
-                low: lows[i] ? Number(lows[i].toFixed(precision)) : Number(rawClose.toFixed(precision)),
-                close: Number(rawClose.toFixed(precision)),
-                volume: volumes[i] || 0,
-              });
-            }
-          }
-
-          if (range === '1H' && chartPoints.length > 30) {
-            chartPoints = chartPoints.slice(-30);
-          } else if (range === '1D' && isCrypto && chartPoints.length > 288) {
-            chartPoints = chartPoints.slice(-288);
-          }
-
-          const precision = currentPrice < 0.01 ? 6 : currentPrice < 1 ? 4 : 2;
-
-          const quote: StockQuote = {
-            symbol: cleanSymbol,
-            name: meta.longName || meta.shortName || cleanSymbol,
-            price: Number(currentPrice.toFixed(precision)),
-            change: Number(change.toFixed(precision)),
-            changePercent: Number(changePercent.toFixed(2)),
-            open: meta.regularMarketOpen ?? currentPrice,
-            high: meta.regularMarketDayHigh ?? currentPrice,
-            low: meta.regularMarketDayLow ?? currentPrice,
-            prevClose: Number(prevClose.toFixed(precision)),
-            volume: meta.regularMarketVolume ? meta.regularMarketVolume.toLocaleString() : 'N/A',
-            marketCap: meta.marketCap ? formatCurrency(meta.marketCap, 'USD', true) : 'N/A',
-            week52High: meta.fiftyTwoWeekHigh,
-            week52Low: meta.fiftyTwoWeekLow,
-            currency: meta.currency || (cleanSymbol.endsWith('.MC') ? 'EUR' : 'USD'),
-            exchange: meta.exchangeName || (cleanSymbol.endsWith('.MC') ? 'BME' : 'NASDAQ'),
-            historicalChanges: {
-              '1H': Number((changePercent * 0.2).toFixed(2)),
-              '1D': Number(changePercent.toFixed(2)),
-              '1W': Number((changePercent * 1.5).toFixed(2)),
-              '1M': Number((changePercent * 3.2).toFixed(2)),
-              '1Y': Number((changePercent * 8.5).toFixed(2)),
-              '5Y': Number((changePercent * 18.0).toFixed(2)),
-              'ALL': Number((changePercent * 35.0).toFixed(2)),
-            },
-          };
-
-          if (chartPoints.length > 0) {
-            return { quote, chart: chartPoints };
+            chartPoints.push({
+              timestamp: ts,
+              dateStr,
+              price: Number(rawClose.toFixed(precision)),
+              open: opens[i] ? Number(opens[i].toFixed(precision)) : Number(rawClose.toFixed(precision)),
+              high: highs[i] ? Number(highs[i].toFixed(precision)) : Number(rawClose.toFixed(precision)),
+              low: lows[i] ? Number(lows[i].toFixed(precision)) : Number(rawClose.toFixed(precision)),
+              close: Number(rawClose.toFixed(precision)),
+              volume: volumes[i] || 0,
+            });
           }
         }
+
+        if (range === '1H' && chartPoints.length > 30) {
+          chartPoints = chartPoints.slice(-30);
+        } else if (range === '1D' && isCrypto && chartPoints.length > 288) {
+          chartPoints = chartPoints.slice(-288);
+        }
+
+        const precision = currentPrice < 0.01 ? 6 : currentPrice < 1 ? 4 : 2;
+
+        const quote: StockQuote = {
+          symbol: cleanSymbol,
+          name: meta.longName || meta.shortName || cleanSymbol,
+          price: Number(currentPrice.toFixed(precision)),
+          change: Number(change.toFixed(precision)),
+          changePercent: Number(changePercent.toFixed(2)),
+          open: meta.regularMarketOpen ?? currentPrice,
+          high: meta.regularMarketDayHigh ?? currentPrice,
+          low: meta.regularMarketDayLow ?? currentPrice,
+          prevClose: Number(prevClose.toFixed(precision)),
+          volume: meta.regularMarketVolume ? meta.regularMarketVolume.toLocaleString() : 'N/A',
+          marketCap: meta.marketCap ? formatCurrency(meta.marketCap, 'USD', true) : 'N/A',
+          week52High: meta.fiftyTwoWeekHigh,
+          week52Low: meta.fiftyTwoWeekLow,
+          currency: meta.currency || (cleanSymbol.endsWith('.MC') ? 'EUR' : 'USD'),
+          exchange: meta.exchangeName || (cleanSymbol.endsWith('.MC') ? 'BME' : 'NASDAQ'),
+          historicalChanges: {
+            '1H': Number((changePercent * 0.2).toFixed(2)),
+            '1D': Number(changePercent.toFixed(2)),
+            '1W': Number((changePercent * 1.5).toFixed(2)),
+            '1M': Number((changePercent * 3.2).toFixed(2)),
+            '1Y': Number((changePercent * 8.5).toFixed(2)),
+            '5Y': Number((changePercent * 18.0).toFixed(2)),
+            'ALL': Number((changePercent * 35.0).toFixed(2)),
+          },
+        };
+
+        if (chartPoints.length > 0) {
+          return { quote, chart: chartPoints };
+        }
       }
-    } catch {
-      // Continue to next provider
     }
+  } catch {
+    // Handled cleanly without errors
   }
 
   // If live market feeds are completely unreachable, return null
@@ -266,22 +252,31 @@ export async function searchSymbols(query: string): Promise<SearchResult[]> {
   if (/^[A-Z0-9.\-]{1,15}$/.test(uppercaseQuery)) {
     const hasMatch = matchedPopular.some(m => m.symbol === uppercaseQuery || m.symbol === `${uppercaseQuery}-USD`);
     if (!hasMatch) {
-      matchedPopular.unshift({
-        symbol: uppercaseQuery.includes('-') ? uppercaseQuery : `${uppercaseQuery}-USD`,
-        name: `${uppercaseQuery} (Crypto / Ticker)`,
-        exchange: 'CRYPTO',
-        type: 'CRYPTOCURRENCY'
-      });
-      matchedPopular.unshift({
-        symbol: uppercaseQuery,
-        name: `${uppercaseQuery} (Stock)`,
-        exchange: uppercaseQuery.endsWith('.MC') ? 'BME' : 'NASDAQ',
-        type: 'EQUITY'
-      });
+      if (uppercaseQuery.includes('-')) {
+        matchedPopular.unshift({
+          symbol: uppercaseQuery,
+          name: `${uppercaseQuery} (Crypto)`,
+          exchange: 'CRYPTO',
+          type: 'CRYPTOCURRENCY'
+        });
+      } else {
+        matchedPopular.unshift({
+          symbol: `${uppercaseQuery}-USD`,
+          name: `${uppercaseQuery} (Crypto / USD)`,
+          exchange: 'CRYPTO',
+          type: 'CRYPTOCURRENCY'
+        });
+        matchedPopular.unshift({
+          symbol: uppercaseQuery,
+          name: `${uppercaseQuery} (Acción)`,
+          exchange: uppercaseQuery.endsWith('.MC') ? 'BME' : 'NASDAQ',
+          type: 'EQUITY'
+        });
+      }
     }
   }
 
-  // 1. Try Supabase Edge Function search
+  // Remote Supabase Edge Function search
   try {
     const supabaseSearchUrl = `${SUPABASE_PROJECT_URL}/functions/v1/market?q=${encodeURIComponent(cleanQ)}`;
     const res = await fetch(supabaseSearchUrl, {
@@ -294,34 +289,6 @@ export async function searchSymbols(query: string): Promise<SearchResult[]> {
 
     if (res.ok) {
       const data = await res.json();
-      if (data?.quotes && Array.isArray(data.quotes)) {
-        const remoteResults = data.quotes
-          .filter((q: any) => q.symbol && (q.shortname || q.longname))
-          .map((q: any) => ({
-            symbol: q.symbol,
-            name: q.longname || q.shortname || q.symbol,
-            exchange: q.exchange || q.exchDisp || 'Global',
-            type: q.quoteType || 'EQUITY'
-          }));
-
-        const map = new Map<string, SearchResult>();
-        [...matchedPopular, ...remoteResults].forEach(item => {
-          if (!map.has(item.symbol)) {
-            map.set(item.symbol, item);
-          }
-        });
-        return Array.from(map.values());
-      }
-    }
-  } catch {}
-
-  // 2. Fallback to AllOrigins proxy
-  try {
-    const targetYahooSearchUrl = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(cleanQ)}`;
-    const searchUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetYahooSearchUrl)}`;
-    const response = await fetch(searchUrl, { signal: AbortSignal.timeout(2500) });
-    if (response.ok) {
-      const data = await response.json();
       if (data?.quotes && Array.isArray(data.quotes)) {
         const remoteResults = data.quotes
           .filter((q: any) => q.symbol && (q.shortname || q.longname))
