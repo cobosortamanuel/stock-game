@@ -139,8 +139,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [gamesList, setGamesList] = useState<GameSummary[]>(() => getAllGamesSync());
   const [isLoadingGames, setIsLoadingGames] = useState<boolean>(false);
   const [activeGameId, setActiveGameId] = useState<string | null>(() => initialGameData?.id || null);
-  const [activeGameName, setActiveGameName] = useState<string>(() => initialGameData?.name || 'Partida Principal');
-  const [isLobbyOpen, setIsLobbyOpen] = useState<boolean>(false);
+  const [activeGameName, setActiveGameName] = useState<string>(() => initialGameData?.name || 'Partida');
+  const [isLobbyOpen, setIsLobbyOpen] = useState<boolean>(() => !initialGameData?.id);
 
   // Active Game In-Memory State (Initialized directly with saved game)
   const [initialCash, setInitialCash] = useState<number>(() => initialGameData?.initialCash ?? DEFAULT_INITIAL_BALANCE);
@@ -237,18 +237,34 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, [activeGameId, fetchGamesList, switchGame]);
 
-  // App Initialization: Ensure at least one game exists
+  // App Initialization: Fetch cloud games cleanly without creating unwanted blank games
   useEffect(() => {
     if (hasInitialized.current) return;
     hasInitialized.current = true;
 
-    const existing = getAllGamesSync();
-    if (existing.length === 0) {
-      createGame('Partida Principal', DEFAULT_INITIAL_BALANCE);
-    } else if (!activeGameId) {
-      switchGame(existing[0].id);
-    }
-  }, [createGame, switchGame, activeGameId]);
+    const initGames = async () => {
+      setIsLoadingGames(true);
+      try {
+        const cloudGames = await fetchGamesList();
+        const localGames = getAllGamesSync();
+        const availableGames = cloudGames.length > 0 ? cloudGames : localGames;
+
+        const storedId = localStorage.getItem(STORAGE_KEYS.ACTIVE_GAME_ID);
+        const match = availableGames.find((g) => g.id === storedId);
+
+        if (match) {
+          await switchGame(match.id);
+        } else {
+          // New device or no selected game: Open Lobby so user can choose or create
+          setIsLobbyOpen(true);
+        }
+      } finally {
+        setIsLoadingGames(false);
+      }
+    };
+
+    initGames();
+  }, [fetchGamesList, switchGame]);
 
   // Sync Quotes
   const refreshMarketData = useCallback(async () => {
