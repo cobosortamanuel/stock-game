@@ -66,35 +66,35 @@ export const PositionCard: React.FC<PositionCardProps> = ({
         <button
           type="button"
           onClick={() => onSelectSymbol(position.symbol)}
-          className="flex items-center gap-3 text-left group"
+          className="flex items-center gap-3 text-left flex-1 min-w-0 group mr-2"
         >
-          <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center font-bold text-xs text-zinc-800 dark:text-zinc-200 border border-black/5 dark:border-white/5 group-hover:border-ios-blue transition-colors">
+          <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center font-bold text-xs text-zinc-800 dark:text-zinc-200 border border-black/5 dark:border-white/5 group-hover:border-ios-blue transition-colors shrink-0">
             {position.symbol.substring(0, 4)}
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-base text-zinc-900 dark:text-zinc-50 leading-tight">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="font-bold text-base text-zinc-900 dark:text-zinc-50 leading-tight shrink-0">
                 {position.symbol}
               </span>
               {/* LONG / SHORT BADGE */}
               <span
-                className={`px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase ${
+                className={`px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase truncate max-w-[130px] ${
                   isLong
                     ? 'bg-ios-green/15 text-ios-green border border-ios-green/30'
                     : 'bg-ios-orange/15 text-ios-orange border border-ios-orange/30'
                 }`}
               >
-                {isLong ? 'Largo (A favor)' : 'Corto (A la baja)'}
+                {isLong ? 'Largo' : 'Corto'}
               </span>
             </div>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate max-w-[150px] sm:max-w-[200px]">
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate block w-full mt-0.5">
               {position.name}
             </p>
           </div>
         </button>
 
         {/* Unrealized Overall P&L Badge */}
-        <div className="text-right">
+        <div className="text-right shrink-0">
           <div
             className={`flex items-center justify-end font-mono font-bold text-sm sm:text-base ${
               isProfitable ? 'text-ios-green' : 'text-ios-red'
