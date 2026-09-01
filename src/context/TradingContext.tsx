@@ -142,12 +142,18 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [activeGameName, setActiveGameName] = useState<string>(() => initialGameData?.name || 'Partida');
   const [isLobbyOpen, setIsLobbyOpen] = useState<boolean>(() => !initialGameData?.id);
 
+  const sanitizeWatchlist = (list: string[] | undefined): string[] => {
+    return (list || DEFAULT_WATCHLIST)
+      .map((s) => (s === 'UBISOFT' ? 'UBI.PA' : s))
+      .filter((s) => s && s.trim().length > 0 && s !== 'CYBERLEEK-USD');
+  };
+
   // Active Game In-Memory State (Initialized directly with saved game)
   const [initialCash, setInitialCash] = useState<number>(() => initialGameData?.initialCash ?? DEFAULT_INITIAL_BALANCE);
   const [cashAvailable, setCashAvailable] = useState<number>(() => initialGameData?.cashAvailable ?? DEFAULT_INITIAL_BALANCE);
   const [positions, setPositions] = useState<Position[]>(() => initialGameData?.positions || []);
   const [tradeHistory, setTradeHistory] = useState<TradeRecord[]>(() => initialGameData?.tradeHistory || []);
-  const [watchlist, setWatchlist] = useState<string[]>(() => initialGameData?.watchlist || DEFAULT_WATCHLIST);
+  const [watchlist, setWatchlist] = useState<string[]>(() => sanitizeWatchlist(initialGameData?.watchlist));
 
   const [liveQuotes, setLiveQuotes] = useState<Record<string, StockQuote>>({});
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
@@ -177,7 +183,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setCashAvailable(data.cashAvailable);
       setPositions(data.positions || []);
       setTradeHistory(data.tradeHistory || []);
-      setWatchlist(data.watchlist || DEFAULT_WATCHLIST);
+      setWatchlist(sanitizeWatchlist(data.watchlist));
       localStorage.setItem(STORAGE_KEYS.ACTIVE_GAME_ID, data.id);
       setIsLobbyOpen(false);
     }
@@ -277,9 +283,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     try {
       const symbolsToFetch = Array.from(
         new Set([...watchlist, ...positions.map((p) => p.symbol), 'TTWO', 'NVDA', 'AAPL', 'TSLA', 'BTC-USD'])
-      );
+      ).filter((s) => s !== 'UBISOFT' && s !== 'CYBERLEEK-USD');
 
       const quotesMap: Record<string, StockQuote> = {};
+      const deadSymbols: string[] = [];
 
       await Promise.all(
         symbolsToFetch.map(async (sym) => {
@@ -287,12 +294,20 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
             const data = await fetchStockData(sym, '1D');
             if (data && data.quote) {
               quotesMap[sym] = data.quote;
+            } else if (!DEFAULT_WATCHLIST.includes(sym)) {
+              deadSymbols.push(sym);
             }
           } catch {
-            // Silently handle
+            if (!DEFAULT_WATCHLIST.includes(sym)) {
+              deadSymbols.push(sym);
+            }
           }
         })
       );
+
+      if (deadSymbols.length > 0) {
+        setWatchlist((prev) => prev.filter((s) => !deadSymbols.includes(s)));
+      }
 
       setLiveQuotes((prev) => ({ ...prev, ...quotesMap }));
 
