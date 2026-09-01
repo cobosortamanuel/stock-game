@@ -39,7 +39,33 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // 2. Chart & Quotes Data Mode
+    // 2. Batch Quotes Mode (Ultra-fast Spark for multiple symbols)
+    const batchSymbols = url.searchParams.get('symbols');
+    if (batchSymbols) {
+      const targetSparkUrl = `https://query1.finance.yahoo.com/v7/finance/spark?symbols=${encodeURIComponent(batchSymbols)}&range=1d&interval=1d`;
+      const response = await fetch(targetSparkUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+      });
+
+      if (!response.ok) {
+        return new Response(
+          JSON.stringify({ error: `Yahoo returned HTTP ${response.status}` }),
+          { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const data = await response.json();
+      return new Response(JSON.stringify(data), {
+        status: 200,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+          'Cache-Control': 'public, max-age=15',
+        },
+      });
+    }
+
+    // 3. Chart & Quotes Data Mode
     const symbol = url.searchParams.get('symbol') || 'TTWO';
     const range = url.searchParams.get('range') || '1d';
     const interval = url.searchParams.get('interval') || '5m';

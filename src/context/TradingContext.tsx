@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Position, TradeRecord, PositionType, StockQuote, GameSummary, GameSaveData } from '../types/market';
-import { fetchStockData } from '../services/marketApi';
+import { fetchStockData, fetchBatchQuotes, POPULAR_SYMBOLS } from '../services/marketApi';
 import { fetchAllGames, syncGameToCloudAndLocal, loadGameData, deleteGameById, renameGameById, generateGameId, getSavedGameSync, getAllGamesSync } from '../services/gamesHubApi';
 
 interface TradingContextType {
@@ -72,7 +72,7 @@ const STORAGE_KEYS = {
 };
 
 const DEFAULT_INITIAL_BALANCE = 100000;
-const DEFAULT_WATCHLIST = ['NVDA', 'AAPL', 'TSLA', 'MSFT', 'BTC-USD', 'AMZN', 'GOOGL', 'SPY'];
+const DEFAULT_WATCHLIST: string[] = [];
 
 export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Theme State
@@ -281,39 +281,37 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const refreshMarketData = useCallback(async () => {
     setIsSyncing(true);
     try {
-      const symbolsToFetch = Array.from(
-        new Set([...watchlist, ...positions.map((p) => p.symbol), 'TTWO', 'NVDA', 'AAPL', 'TSLA', 'BTC-USD'])
+      const allCatalogSymbols = POPULAR_SYMBOLS.map((s) => s.symbol);
+      const customSymbols = Array.from(
+        new Set([...watchlist, ...positions.map((p) => p.symbol), ...allCatalogSymbols])
       ).filter((s) => s !== 'UBISOFT' && s !== 'CYBERLEEK-USD');
 
-      const quotesMap: Record<string, StockQuote> = {};
-      const deadSymbols: string[] = [];
+      // 1. Fetch batch quotes for all catalog & user assets
+      const batchQuotes = await fetchBatchQuotes(customSymbols);
+
+      // 2. Also fetch detailed 1D chart data for active positions and watchlist if missing
+      const prioritySymbols = Array.from(new Set([...watchlist, ...positions.map((p) => p.symbol)]));
+      const individualQuotes: Record<string, StockQuote> = {};
 
       await Promise.all(
-        symbolsToFetch.map(async (sym) => {
-          try {
-            const data = await fetchStockData(sym, '1D');
-            if (data && data.quote) {
-              quotesMap[sym] = data.quote;
-            } else if (!DEFAULT_WATCHLIST.includes(sym)) {
-              deadSymbols.push(sym);
-            }
-          } catch {
-            if (!DEFAULT_WATCHLIST.includes(sym)) {
-              deadSymbols.push(sym);
-            }
+        prioritySymbols.map(async (sym) => {
+          if (!batchQuotes[sym]) {
+            try {
+              const data = await fetchStockData(sym, '1D');
+              if (data && data.quote) {
+                individualQuotes[sym] = data.quote;
+              }
+            } catch {}
           }
         })
       );
 
-      if (deadSymbols.length > 0) {
-        setWatchlist((prev) => prev.filter((s) => !deadSymbols.includes(s)));
-      }
-
-      setLiveQuotes((prev) => ({ ...prev, ...quotesMap }));
+      const mergedQuotes = { ...batchQuotes, ...individualQuotes };
+      setLiveQuotes((prev) => ({ ...prev, ...mergedQuotes }));
 
       setPositions((prevPositions) =>
         prevPositions.map((pos) => {
-          const currentQuote = quotesMap[pos.symbol];
+          const currentQuote = mergedQuotes[pos.symbol];
           if (!currentQuote) return pos;
           const curPrice = currentQuote.price;
 

@@ -91,6 +91,18 @@ export const MarketsView: React.FC<MarketsViewProps> = ({
     if (isFavA && !isFavB) return -1;
     if (!isFavA && isFavB) return 1;
 
+    // Si estamos en Subiendo hoy o Bajando hoy, ordenar por mayor porcentaje
+    if (selectedCategory === 'GAINERS') {
+      const chgA = liveQuotes[a.symbol]?.changePercent ?? 0;
+      const chgB = liveQuotes[b.symbol]?.changePercent ?? 0;
+      return chgB - chgA;
+    }
+    if (selectedCategory === 'LOSERS') {
+      const chgA = liveQuotes[a.symbol]?.changePercent ?? 0;
+      const chgB = liveQuotes[b.symbol]?.changePercent ?? 0;
+      return chgA - chgB;
+    }
+
     // Orden por categoría
     const catA = a.category || mapYahooToCategory(a);
     const catB = b.category || mapYahooToCategory(b);
