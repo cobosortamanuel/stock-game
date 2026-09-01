@@ -16,6 +16,20 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      (function() {
+        try {
+          var theme = localStorage.getItem('apex_theme_v8');
+          if (theme === 'light') {
+            document.documentElement.classList.remove('dark');
+            var meta = document.getElementById('theme-color-meta');
+            if (meta) meta.setAttribute('content', '#F2F2F7');
+          } else {
+            document.documentElement.classList.add('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body class="bg-ios-bg-light dark:bg-ios-bg-dark text-zinc-900 dark:text-zinc-100 antialiased selection:bg-ios-blue selection:text-white select-none overscroll-none">
     <div id="root"></div>
