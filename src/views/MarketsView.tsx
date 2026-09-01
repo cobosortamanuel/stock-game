@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Star } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
-import { POPULAR_SYMBOLS, MARKET_CATEGORIES, mapYahooToCategory, formatCurrency, formatPercent } from '../services/marketApi';
+import { POPULAR_SYMBOLS, MARKET_CATEGORIES, mapYahooToCategory, getAssetVariation, formatCurrency, formatPercent } from '../services/marketApi';
 
 interface MarketsViewProps {
   onSelectSymbol: (symbol: string) => void;
@@ -45,6 +45,7 @@ export const MarketsView: React.FC<MarketsViewProps> = ({
         const quote = liveQuotes[sym];
         const isCrypto = sym.includes('-') || sym.includes('USD') || sym.includes('BTC') || sym.includes('ETH');
         const autoCat = mapYahooToCategory({ symbol: sym, type: isCrypto ? 'cryptocurrency' : 'equity' });
+        const variation = getAssetVariation(sym, quote?.price || 100);
 
         list.unshift({
           symbol: sym,
@@ -52,6 +53,8 @@ export const MarketsView: React.FC<MarketsViewProps> = ({
           sector: isCrypto ? 'Criptomoneda' : 'Acción Global',
           category: autoCat,
           basePrice: quote?.price || 100,
+          baseChange: variation.change,
+          baseChangePercent: variation.changePercent,
         });
         existing.add(sym);
       }
@@ -63,7 +66,7 @@ export const MarketsView: React.FC<MarketsViewProps> = ({
   // Filter symbols based on favorites toggle AND selected category
   const filteredSymbols = allAvailableSymbols.filter((stock: any) => {
     const quote = liveQuotes[stock.symbol];
-    const change = quote ? quote.changePercent : 0;
+    const changePercent = quote ? quote.changePercent : (stock.baseChangePercent ?? 0);
     const isFavorited = watchlist.includes(stock.symbol);
 
     // 1. If onlyFavorites is toggled on, exclude non-favorites
@@ -75,9 +78,9 @@ export const MarketsView: React.FC<MarketsViewProps> = ({
     const cat = stock.category || mapYahooToCategory(stock);
     switch (selectedCategory) {
       case 'GAINERS':
-        return change > 0;
+        return changePercent > 0;
       case 'LOSERS':
-        return change < 0;
+        return changePercent < 0;
       case 'ALL':
         return true;
       default:
@@ -93,13 +96,13 @@ export const MarketsView: React.FC<MarketsViewProps> = ({
 
     // Si estamos en Subiendo hoy o Bajando hoy, ordenar por mayor porcentaje
     if (selectedCategory === 'GAINERS') {
-      const chgA = liveQuotes[a.symbol]?.changePercent ?? 0;
-      const chgB = liveQuotes[b.symbol]?.changePercent ?? 0;
+      const chgA = liveQuotes[a.symbol]?.changePercent ?? a.baseChangePercent ?? 0;
+      const chgB = liveQuotes[b.symbol]?.changePercent ?? b.baseChangePercent ?? 0;
       return chgB - chgA;
     }
     if (selectedCategory === 'LOSERS') {
-      const chgA = liveQuotes[a.symbol]?.changePercent ?? 0;
-      const chgB = liveQuotes[b.symbol]?.changePercent ?? 0;
+      const chgA = liveQuotes[a.symbol]?.changePercent ?? a.baseChangePercent ?? 0;
+      const chgB = liveQuotes[b.symbol]?.changePercent ?? b.baseChangePercent ?? 0;
       return chgA - chgB;
     }
 
@@ -185,9 +188,9 @@ export const MarketsView: React.FC<MarketsViewProps> = ({
           filteredSymbols.map((item: any) => {
             const quote = liveQuotes[item.symbol];
             const price = quote ? quote.price : item.basePrice;
-            const change = quote ? quote.change : 0;
-            const changePercent = quote ? quote.changePercent : 0;
-            const isUp = change >= 0;
+            const change = quote ? quote.change : item.baseChange;
+            const changePercent = quote ? quote.changePercent : item.baseChangePercent;
+            const isUp = changePercent >= 0;
             const isFavorited = watchlist.includes(item.symbol);
 
             return (

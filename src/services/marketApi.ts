@@ -1,6 +1,17 @@
 import { StockQuote, ChartPoint, TimeRange, SearchResult } from '../types/market';
 
-export const POPULAR_SYMBOLS = [
+export function getAssetVariation(symbol: string, basePrice: number): { change: number; changePercent: number } {
+  let hash = 0;
+  for (let i = 0; i < symbol.length; i++) {
+    hash = (hash * 31 + symbol.charCodeAt(i)) & 0xffffffff;
+  }
+  const normalized = (Math.abs(hash) % 900 - 450) / 100;
+  const pct = Number((normalized === 0 ? 1.25 : normalized).toFixed(2));
+  const change = Number(((basePrice * pct) / 100).toFixed(basePrice < 1 ? 4 : 2));
+  return { change, changePercent: pct };
+}
+
+const RAW_SYMBOLS = [
   // --- Videojuegos & Gaming ---
   { symbol: 'TTWO', name: 'Take-Two Interactive Software, Inc.', sector: 'Videojuegos', category: 'GAMING', basePrice: 219.70 },
   { symbol: 'EA', name: 'Electronic Arts Inc.', sector: 'Videojuegos', category: 'GAMING', basePrice: 144.20 },
@@ -144,6 +155,15 @@ export const POPULAR_SYMBOLS = [
   { symbol: 'IWM', name: 'iShares Russell 2000 ETF', sector: 'ETF Pequeñas Empresas', category: 'INDICES', basePrice: 218.40 },
   { symbol: 'VTI', name: 'Vanguard Total Stock Market ETF', sector: 'ETF Mercado Total EE.UU.', category: 'INDICES', basePrice: 278.90 },
 ];
+
+export const POPULAR_SYMBOLS = RAW_SYMBOLS.map((item) => {
+  const variation = getAssetVariation(item.symbol, item.basePrice);
+  return {
+    ...item,
+    baseChange: variation.change,
+    baseChangePercent: variation.changePercent,
+  };
+});
 
 export const MARKET_CATEGORIES = [
   { id: 'ALL', label: 'Todo' },
