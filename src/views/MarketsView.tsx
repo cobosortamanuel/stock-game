@@ -9,12 +9,12 @@ interface MarketsViewProps {
 }
 
 const CATEGORY_ORDER: Record<string, number> = {
-  GAMING: 1,
-  TECH: 2,
-  CRYPTO: 3,
-  AUTO: 4,
-  MEDIA: 5,
-  CONSUMER: 6,
+  TECH: 1,
+  CONSUMER: 2,
+  GAMING: 3,
+  CRYPTO: 4,
+  AUTO: 5,
+  MEDIA: 6,
   BANKING: 7,
   ENERGY: 8,
   INDICES: 9,

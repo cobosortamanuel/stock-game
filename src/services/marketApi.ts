@@ -147,12 +147,12 @@ export const POPULAR_SYMBOLS = [
 
 export const MARKET_CATEGORIES = [
   { id: 'ALL', label: 'Todo' },
-  { id: 'GAMING', label: 'Videojuegos' },
   { id: 'TECH', label: 'Tecnología e IA' },
+  { id: 'CONSUMER', label: 'Consumo y Moda' },
+  { id: 'GAMING', label: 'Videojuegos' },
   { id: 'CRYPTO', label: 'Criptomonedas' },
   { id: 'AUTO', label: 'Automotriz' },
   { id: 'MEDIA', label: 'Streaming y Cine' },
-  { id: 'CONSUMER', label: 'Consumo y Moda' },
   { id: 'BANKING', label: 'Banca y Finanzas' },
   { id: 'ENERGY', label: 'Energía y Petróleo' },
   { id: 'INDICES', label: 'Índices y ETFs' },
