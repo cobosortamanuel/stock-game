@@ -15,6 +15,7 @@ import {
   Pencil,
   X,
   AlertCircle,
+  Trash2,
 } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { formatCurrency } from '../services/marketApi';
@@ -32,12 +33,16 @@ export const SettingsView: React.FC = () => {
     renameGame,
     updatePin,
     setGamePrivacy,
+    deleteGame,
     openLobby,
     gamesList,
   } = useTrading();
 
   const [isResetConfirming, setIsResetConfirming] = useState<boolean>(false);
   const [resetSuccess, setResetSuccess] = useState<boolean>(false);
+
+  // Delete active game state
+  const [isDeleteConfirming, setIsDeleteConfirming] = useState<boolean>(false);
 
   // Rename state
   const [isRenaming, setIsRenaming] = useState<boolean>(false);
@@ -59,6 +64,12 @@ export const SettingsView: React.FC = () => {
     setIsResetConfirming(false);
     setResetSuccess(true);
     setTimeout(() => setResetSuccess(false), 2000);
+  };
+
+  const handleDeleteActiveGame = async () => {
+    if (!activeGameId) return;
+    await deleteGame(activeGameId);
+    setIsDeleteConfirming(false);
   };
 
   const startRenaming = () => {
@@ -92,11 +103,9 @@ export const SettingsView: React.FC = () => {
 
   const handleTogglePrivacy = async (targetPrivate: boolean) => {
     if (targetPrivate) {
-      // Switch from Public to Private: setup default/current PIN
       const pinToSet = currentGamePin || Math.floor(1000 + Math.random() * 9000).toString();
       await setGamePrivacy(true, pinToSet);
     } else {
-      // Switch from Private to Public
       await setGamePrivacy(false);
     }
     setIsPrivacyConfirmOpen(false);
@@ -173,7 +182,7 @@ export const SettingsView: React.FC = () => {
 
                   {isCurrentGamePrivate ? (
                     <span className="px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-[10px] font-bold flex items-center gap-0.5">
-                      <Lock className="w-2.5 h-2.5 text-amber-500" /> Privada
+                      <Lock className="w-2.5 h-2.5 text-zinc-500" /> Privada
                     </span>
                   ) : (
                     <span className="px-1.5 py-0.5 rounded bg-ios-blue/15 text-ios-blue text-[10px] font-bold flex items-center gap-0.5">
@@ -259,7 +268,7 @@ export const SettingsView: React.FC = () => {
               }}
               className={`py-2.5 px-3 rounded-2xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 ios-active ${
                 isCurrentGamePrivate
-                  ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 font-extrabold'
+                  ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 border-transparent font-extrabold shadow-sm'
                   : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-black/5 dark:border-white/5 hover:bg-zinc-200'
               }`}
             >
@@ -270,12 +279,12 @@ export const SettingsView: React.FC = () => {
 
           {/* Confirm Make Public Modal / Warning */}
           {isPrivacyConfirmOpen && (
-            <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-2xl space-y-2.5 animate-fadeIn">
-              <div className="flex items-center gap-1.5 text-amber-700 dark:text-amber-300 font-bold text-xs">
-                <AlertCircle className="w-4 h-4" />
+            <div className="p-3.5 bg-zinc-100 dark:bg-zinc-800/80 border border-black/5 dark:border-white/10 rounded-2xl space-y-2.5 animate-fadeIn">
+              <div className="flex items-center gap-1.5 text-zinc-900 dark:text-zinc-100 font-bold text-xs">
+                <AlertCircle className="w-4 h-4 text-ios-blue" />
                 <span>¿Hacer la partida pública?</span>
               </div>
-              <p className="text-[11px] text-zinc-600 dark:text-zinc-300">
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
                 Al hacerla pública, cualquier usuario podrá entrar, apostar y modificar esta partida sin necesidad de PIN.
               </p>
               <div className="flex gap-2 pt-1">
@@ -304,7 +313,7 @@ export const SettingsView: React.FC = () => {
                 <form onSubmit={handleSavePin} className="p-3.5 bg-zinc-100 dark:bg-zinc-800/80 rounded-2xl space-y-3 animate-fadeIn">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
-                      <KeyRound className="w-3.5 h-3.5 text-amber-500" />
+                      <KeyRound className="w-3.5 h-3.5 text-ios-blue" />
                       <span>Nuevo PIN:</span>
                     </label>
                     <button
@@ -356,7 +365,7 @@ export const SettingsView: React.FC = () => {
                   }}
                   className="w-full py-3 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 text-xs font-bold flex items-center justify-center gap-2 ios-active hover:bg-zinc-200 dark:hover:bg-zinc-700"
                 >
-                  <KeyRound className="w-4 h-4 text-amber-500" />
+                  <KeyRound className="w-4 h-4 text-ios-blue" />
                   <span>Cambiar Código PIN</span>
                 </button>
               )}
@@ -388,7 +397,7 @@ export const SettingsView: React.FC = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-700 dark:text-zinc-300">
-              {isDarkMode ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5 text-amber-500" />}
+              {isDarkMode ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5 text-zinc-500" />}
             </div>
             <div>
               <span className="text-sm font-bold text-zinc-900 dark:text-zinc-50 block">
@@ -465,6 +474,52 @@ export const SettingsView: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Delete Game Section (Only available when game is unlocked) */}
+      {isCurrentGameUnlocked && activeGameId && (
+        <div className="bg-white dark:bg-ios-card-dark rounded-3xl p-5 border border-black/5 dark:border-white/5 shadow-ios">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-ios-red mb-3">
+            Zona de Peligro
+          </h2>
+
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4">
+            Elimina permanentemente esta partida y su historial de la nube.
+          </p>
+
+          {isDeleteConfirming ? (
+            <div className="p-3.5 bg-red-500/10 border border-red-500/30 rounded-2xl space-y-2.5 animate-fadeIn">
+              <span className="text-xs font-medium text-ios-red block">
+                ¿Estás seguro de que deseas eliminar permanentemente <strong>"{activeGameName}"</strong>? Esta acción no se puede deshacer.
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleDeleteActiveGame}
+                  className="flex-1 py-2 rounded-xl bg-ios-red text-white text-xs font-bold ios-active"
+                >
+                  Sí, Eliminar Definitivamente
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsDeleteConfirming(false)}
+                  className="py-2 px-4 rounded-xl bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-semibold ios-active"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsDeleteConfirming(true)}
+              className="w-full py-3 rounded-2xl bg-red-500/10 text-ios-red text-xs font-bold flex items-center justify-center gap-2 ios-active hover:bg-red-500/20"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Eliminar Partida Actual</span>
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 };

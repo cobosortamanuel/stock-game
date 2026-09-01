@@ -44,7 +44,7 @@ export const Header: React.FC<HeaderProps> = ({
                   {activeGameName || title}
                 </span>
                 {isCurrentGamePrivate ? (
-                  <Lock className="w-3 h-3 text-amber-500 shrink-0" />
+                  <Lock className="w-3 h-3 text-zinc-400 dark:text-zinc-500 shrink-0" />
                 ) : (
                   <Globe className="w-3 h-3 text-ios-blue shrink-0" />
                 )}

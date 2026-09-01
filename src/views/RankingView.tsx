@@ -187,12 +187,8 @@ export const RankingView: React.FC = () => {
                     {/* Rank Badge */}
                     <div
                       className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
-                        isTop1
-                          ? 'bg-amber-400/20 text-amber-500 font-extrabold ring-1 ring-amber-400/40'
-                          : isTop2
-                          ? 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold'
-                          : isTop3
-                          ? 'bg-amber-700/15 text-amber-800 dark:text-amber-300 font-bold'
+                        isTop1 || isTop2 || isTop3
+                          ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50 font-extrabold ring-1 ring-black/5 dark:ring-white/10 shadow-sm'
                           : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 font-mono'
                       }`}
                     >
@@ -491,7 +487,7 @@ export const RankingView: React.FC = () => {
                     </>
                   ) : (
                     <>
-                      <KeyRound className="w-4 h-4 text-amber-500" />
+                      <KeyRound className="w-4 h-4 text-ios-blue" />
                       <span>Desbloquear con PIN para Operar</span>
                     </>
                   )}
@@ -508,7 +504,7 @@ export const RankingView: React.FC = () => {
           <div className="bg-white dark:bg-ios-card-dark rounded-3xl p-5 border border-black/10 dark:border-white/10 shadow-2xl max-w-sm w-full space-y-4 animate-scaleUp">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-500 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-xl bg-ios-blue/15 text-ios-blue flex items-center justify-center">
                   <KeyRound className="w-4 h-4" />
                 </div>
                 <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-50">

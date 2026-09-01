@@ -1,13 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   PlusCircle,
-  Trash2,
   ChevronRight,
   X,
   Loader2,
   RefreshCw,
-  Pencil,
-  Check,
   FolderKanban,
   Cloud,
   Lock,
@@ -15,12 +12,11 @@ import {
   KeyRound,
   Dices,
   AlertCircle,
-  ShieldCheck,
 } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { formatCurrency, formatPercent } from '../services/marketApi';
 import { subscribeToSupabaseRealtime } from '../services/supabaseService';
-import { isGameUnlocked, unlockGame, markGameUnlockedLocally } from '../services/gamesHubApi';
+import { isGameUnlocked, unlockGame } from '../services/gamesHubApi';
 import { GameSummary } from '../types/market';
 
 interface GamesLobbyViewProps {
@@ -34,26 +30,20 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
     isLoadingGames,
     fetchGamesList,
     createGame,
-    renameGame,
     switchGame,
-    deleteGame,
   } = useTrading();
 
   // Create form state
   const [isCreating, setIsCreating] = useState<boolean>(false);
   const [newGameName, setNewGameName] = useState<string>('');
-  const [isPrivate, setIsPrivate] = useState<boolean>(true); // Default private as requested
+  const [isPrivate, setIsPrivate] = useState<boolean>(true);
   const [pinCode, setPinCode] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-
-  // Delete state
-  const [gameToDelete, setGameToDelete] = useState<string | null>(null);
 
   // PIN Unlock Modal for Locked Games
   const [pinModalGame, setPinModalGame] = useState<GameSummary | null>(null);
   const [pinInput, setPinInput] = useState<string>('');
   const [pinError, setPinError] = useState<string | null>(null);
-  const [pendingActionAfterUnlock, setPendingActionAfterUnlock] = useState<'enter' | 'delete' | null>(null);
 
   // Stable sort: Active game pinned to top, remaining sorted stably by createdAt (no flickering/jumping)
   const sortedGames = useMemo(() => {
@@ -105,23 +95,6 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
     }
   };
 
-  const handleDeleteTrigger = (game: GameSummary) => {
-    const unlocked = isGameUnlocked(game);
-    if (!unlocked) {
-      setPinModalGame(game);
-      setPendingActionAfterUnlock('delete');
-      setPinInput('');
-      setPinError(null);
-      return;
-    }
-    setGameToDelete(game.id);
-  };
-
-  const handleDeleteConfirm = async (id: string) => {
-    await deleteGame(id);
-    setGameToDelete(null);
-  };
-
   const handleEnterGame = async (game: GameSummary) => {
     const isUnlocked = isGameUnlocked(game);
     if (isUnlocked) {
@@ -129,29 +102,21 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
       onClose();
     } else {
       setPinModalGame(game);
-      setPendingActionAfterUnlock('enter');
       setPinInput('');
       setPinError(null);
     }
   };
 
-  const handleUnlockAndAction = async (e: React.FormEvent) => {
+  const handleUnlockAndEnter = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!pinModalGame) return;
     const ok = unlockGame(pinModalGame, pinInput);
     if (ok) {
-      const action = pendingActionAfterUnlock;
       const targetId = pinModalGame.id;
       setPinError(null);
       setPinModalGame(null);
-      setPendingActionAfterUnlock(null);
-
-      if (action === 'delete') {
-        await deleteGame(targetId);
-      } else {
-        await switchGame(targetId);
-        onClose();
-      }
+      await switchGame(targetId);
+      onClose();
     } else {
       setPinError('PIN incorrecto. Vuelve a intentarlo.');
     }
@@ -283,7 +248,7 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
                         : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-black/5 dark:border-white/5'
                     }`}
                   >
-                    <Lock className="w-3.5 h-3.5 text-amber-500" />
+                    <Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500" />
                     <span>Privada (con PIN)</span>
                   </button>
 
@@ -304,16 +269,16 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
 
               {/* PIN Code Setup for Private Game */}
               {isPrivate && (
-                <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-2xl space-y-2.5 animate-fadeIn">
+                <div className="p-3.5 bg-zinc-100 dark:bg-zinc-800/80 border border-black/5 dark:border-white/10 rounded-2xl space-y-2.5 animate-fadeIn">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
-                      <KeyRound className="w-3.5 h-3.5" />
+                    <label className="text-xs font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+                      <KeyRound className="w-3.5 h-3.5 text-ios-blue" />
                       <span>PIN de Seguridad:</span>
                     </label>
                     <button
                       type="button"
                       onClick={handleGeneratePin}
-                      className="text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1"
+                      className="text-[11px] font-bold text-ios-blue hover:underline flex items-center gap-1"
                     >
                       <Dices className="w-3.5 h-3.5" />
                       <span>Generar PIN</span>
@@ -325,7 +290,7 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
                     value={pinCode}
                     onChange={(e) => setPinCode(e.target.value)}
                     placeholder="Ej: 1234 (o pulsa generar)"
-                    className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-zinc-900 text-sm font-mono tracking-widest text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 border border-black/5 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-zinc-900 text-sm font-mono tracking-widest text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 border border-black/5 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-ios-blue"
                   />
 
                   <p className="text-[10px] text-zinc-500 dark:text-zinc-400 leading-tight">
@@ -388,7 +353,7 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
                         : 'border-black/5 dark:border-white/5 hover:border-black/20 dark:hover:border-white/20'
                     }`}
                   >
-                    {/* Header: Name, Privacy Badge & Delete Action */}
+                    {/* Header: Name, Privacy Badge */}
                     <div className="flex items-start justify-between">
                       <div className="flex-1 mr-2">
                         <div className="flex items-center gap-2">
@@ -401,7 +366,7 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
                               title="Partida Privada"
                               className="px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-[10px] font-bold flex items-center gap-1"
                             >
-                              <Lock className="w-2.5 h-2.5 text-amber-500" />
+                              <Lock className="w-2.5 h-2.5 text-zinc-500" />
                               <span>{unlocked ? 'Desbloqueada' : 'PIN'}</span>
                             </span>
                           ) : (
@@ -425,35 +390,6 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
                           ID: {game.id} • Actualizado: {timeAgo}
                         </p>
                       </div>
-
-                      {/* Delete Trigger */}
-                      {gameToDelete === game.id ? (
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteConfirm(game.id)}
-                            className="px-2.5 py-1 rounded-lg bg-ios-red text-white text-[11px] font-bold ios-active shadow-sm"
-                          >
-                            Eliminar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setGameToDelete(null)}
-                            className="p-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-500 text-xs"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteTrigger(game)}
-                          className="p-2 text-zinc-400 hover:text-ios-red ios-active"
-                          title="Eliminar partida"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
                     </div>
 
                     {/* Stats Row */}
@@ -508,7 +444,7 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
                           </>
                         ) : (
                           <>
-                            <KeyRound className="w-3.5 h-3.5 text-amber-500" />
+                            <KeyRound className="w-3.5 h-3.5 text-ios-blue" />
                             <span>Desbloquear con PIN</span>
                           </>
                         )}
@@ -548,18 +484,17 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
           <div className="bg-white dark:bg-ios-card-dark rounded-3xl p-5 border border-black/10 dark:border-white/10 shadow-2xl max-w-sm w-full space-y-4 animate-scaleUp">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-500 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-xl bg-ios-blue/15 text-ios-blue flex items-center justify-center">
                   <KeyRound className="w-4 h-4" />
                 </div>
                 <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-50">
-                  {pendingActionAfterUnlock === 'delete' ? 'Confirmar PIN para Eliminar' : 'Desbloquear Partida'}
+                  Desbloquear Partida
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => {
                   setPinModalGame(null);
-                  setPendingActionAfterUnlock(null);
                   setPinInput('');
                   setPinError(null);
                 }}
@@ -570,12 +505,10 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
             </div>
 
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              {pendingActionAfterUnlock === 'delete'
-                ? `Introduce el PIN de "${pinModalGame.name}" para autorizar su eliminación:`
-                : `Introduce el PIN de "${pinModalGame.name}" para entrar y operar en este dispositivo:`}
+              Introduce el PIN de <strong>"{pinModalGame.name}"</strong> para entrar y operar en este dispositivo:
             </p>
 
-            <form onSubmit={handleUnlockAndAction} className="space-y-3">
+            <form onSubmit={handleUnlockAndEnter} className="space-y-3">
               <input
                 type="password"
                 autoFocus
@@ -585,7 +518,7 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
                   setPinError(null);
                 }}
                 placeholder="Escribe el PIN..."
-                className="w-full px-3.5 py-2.5 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-center font-mono text-base tracking-widest text-zinc-900 dark:text-zinc-50 border border-black/5 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                className="w-full px-3.5 py-2.5 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-center font-mono text-base tracking-widest text-zinc-900 dark:text-zinc-50 border border-black/5 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-ios-blue"
               />
 
               {pinError && (
@@ -599,17 +532,14 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
                 <button
                   type="submit"
                   disabled={!pinInput.trim()}
-                  className={`flex-1 py-3 rounded-2xl text-white font-bold text-xs shadow-md ios-active disabled:opacity-50 ${
-                    pendingActionAfterUnlock === 'delete' ? 'bg-ios-red' : 'bg-amber-500'
-                  }`}
+                  className="flex-1 py-3 rounded-2xl bg-ios-blue text-white font-bold text-xs shadow-md ios-active disabled:opacity-50"
                 >
-                  {pendingActionAfterUnlock === 'delete' ? 'Desbloquear y Eliminar' : 'Desbloquear y Entrar'}
+                  Desbloquear y Entrar
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     setPinModalGame(null);
-                    setPendingActionAfterUnlock(null);
                     setPinInput('');
                     setPinError(null);
                   }}
