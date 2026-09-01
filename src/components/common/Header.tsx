@@ -28,19 +28,19 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="sticky top-0 z-30 w-full pt-safe ios-glass-header border-b border-black/5 dark:border-white/10 transition-colors duration-200">
       <div className="max-w-md mx-auto px-4 h-14 flex items-center justify-between">
         {/* Title / Active Game Info */}
-        <div className="flex items-center min-w-0">
+        <div className="flex items-center gap-2.5">
           <button
             type="button"
             onClick={openLobby}
-            className="flex items-center gap-2.5 text-left group ios-active min-w-0"
+            className="flex items-center gap-2 text-left group ios-active"
             title="Cambiar o crear partida"
           >
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-ios-green text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-ios-green text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
               <TrendingUp className="w-4 h-4 stroke-[2.5]" />
             </div>
-            <div className="flex flex-col justify-center min-w-0">
-              <div className="flex items-center gap-1.5 leading-none">
-                <span className="text-sm font-bold text-zinc-900 dark:text-zinc-50 leading-none truncate max-w-[140px] sm:max-w-[190px]">
+            <div>
+              <div className="flex items-center gap-1">
+                <span className="text-sm font-bold text-zinc-900 dark:text-zinc-50 leading-tight block truncate max-w-[130px] sm:max-w-[180px]">
                   {activeGameName || title}
                 </span>
                 {isCurrentGamePrivate ? (
@@ -49,7 +49,7 @@ export const Header: React.FC<HeaderProps> = ({
                   <Globe className="w-3 h-3 text-ios-blue shrink-0" />
                 )}
               </div>
-              <p className="text-[10px] text-ios-blue font-bold tracking-tight leading-none mt-1">
+              <p className="text-[11px] text-ios-blue font-bold tracking-tight">
                 {isCurrentGamePrivate && !isCurrentGameUnlocked ? 'Modo Espectador' : 'Partida'}
               </p>
             </div>
@@ -57,7 +57,7 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Right Controls */}
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-1">
           {/* Quick Search Trigger */}
           <button
             type="button"
@@ -87,7 +87,7 @@ export const Header: React.FC<HeaderProps> = ({
             aria-label="Alternar modo oscuro y claro"
           >
             {isDarkMode ? (
-              <Sun className="w-4 h-4 text-zinc-300" />
+              <Sun className="w-4 h-4 text-amber-400" />
             ) : (
               <Moon className="w-4 h-4 text-zinc-700" />
             )}
