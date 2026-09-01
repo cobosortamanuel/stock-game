@@ -39,24 +39,31 @@ export const TradeModal: React.FC<TradeModalProps> = ({
     setAmount(Math.floor(calculated).toString());
   };
 
-  const handleExecuteTrade = () => {
+  const handleExecuteTrade = (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (!isAffordable) return;
     const res = openPosition(quote.symbol, quote.name, numAmount, positionType, quote.price);
     setFeedback(res);
     if (res.success) {
       setTimeout(() => {
         onClose();
-      }, 1400);
+      }, 1200);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center animate-fadeIn">
       {/* Backdrop tap to close */}
-      <div className="absolute inset-0" onClick={onClose} />
+      <div 
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" 
+        onClick={onClose} 
+      />
 
-      {/* Bottom Sheet Card */}
-      <div className="w-full max-w-md bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-900 dark:to-zinc-950 rounded-t-3xl sm:rounded-3xl p-5 border border-black/10 dark:border-white/10 shadow-ios-sheet animate-slideUp sm:animate-scaleUp max-h-[90vh] overflow-y-auto">
+      {/* Bottom Sheet Card with strict z-10 and stopPropagation */}
+      <div 
+        onClick={(e) => e.stopPropagation()}
+        className="relative z-10 w-full max-w-md bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-900 dark:to-zinc-950 rounded-t-3xl sm:rounded-3xl p-5 border border-black/10 dark:border-white/10 shadow-ios-sheet animate-slideUp sm:animate-scaleUp max-h-[90vh] overflow-y-auto"
+      >
         {/* iOS Handle Indicator */}
         <div className="w-12 h-1.5 rounded-full bg-zinc-300 dark:bg-zinc-700 mx-auto mb-4 sm:hidden" />
 
@@ -222,8 +229,8 @@ export const TradeModal: React.FC<TradeModalProps> = ({
               !isAffordable || numAmount <= 0
                 ? 'bg-zinc-300 dark:bg-zinc-700 text-zinc-500 cursor-not-allowed'
                 : positionType === 'LONG'
-                ? 'bg-ios-green text-white hover:bg-emerald-600'
-                : 'bg-ios-orange text-white hover:bg-amber-600'
+                ? 'bg-ios-green text-white hover:bg-emerald-600 active:scale-[0.98]'
+                : 'bg-ios-orange text-white hover:bg-amber-600 active:scale-[0.98]'
             }`}
           >
             {numAmount > cashAvailable
