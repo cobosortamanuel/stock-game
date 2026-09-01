@@ -1,15 +1,47 @@
 declare const __APP_BUILD_ID__: string;
 
-const CURRENT_BUILD_ID = typeof __APP_BUILD_ID__ !== 'undefined' ? __APP_BUILD_ID__ : 'dev';
+export const CURRENT_BUILD_ID = typeof __APP_BUILD_ID__ !== 'undefined' ? __APP_BUILD_ID__ : 'dev';
+export const APP_VERSION = '1.0.8';
 const RELOAD_GUARD_KEY = 'stock_game_last_reloaded_build_v1';
+
+/**
+ * Purges CacheStorage and Service Workers, then force reloads the web app.
+ */
+export async function forceHardReload(): Promise<void> {
+  if ('caches' in window) {
+    try {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    } catch {}
+  }
+
+  if ('serviceWorker' in navigator) {
+    try {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      for (const reg of registrations) {
+        await reg.update();
+      }
+    } catch {}
+  }
+
+  const currentUrl = new URL(window.location.href);
+  currentUrl.searchParams.set('v', String(Date.now()));
+  window.location.replace(currentUrl.toString());
+}
 
 /**
  * Checks if a newer version of the web app is deployed on the server.
  * If a new build is detected, caches are cleared and the page is refreshed automatically.
  */
-export async function checkAppVersion(): Promise<boolean> {
+export async function checkAppVersion(isManual: boolean = false): Promise<boolean> {
   // If in dev environment without build ID, skip check
-  if (CURRENT_BUILD_ID === 'dev' || !CURRENT_BUILD_ID) return false;
+  if (CURRENT_BUILD_ID === 'dev' || !CURRENT_BUILD_ID) {
+    if (isManual) {
+      await forceHardReload();
+      return true;
+    }
+    return false;
+  }
 
   try {
     const base = (import.meta as any).env?.BASE_URL || './';
@@ -25,45 +57,35 @@ export async function checkAppVersion(): Promise<boolean> {
       },
     });
 
-    if (!response.ok) return false;
+    if (!response.ok) {
+      if (isManual) {
+        await forceHardReload();
+        return true;
+      }
+      return false;
+    }
 
     const data = await response.json();
-    if (data && data.buildId && data.buildId !== CURRENT_BUILD_ID) {
+    if (data && data.buildId && (data.buildId !== CURRENT_BUILD_ID || isManual)) {
       console.log(`[VersionChecker] Nueva versión detectada: ${data.buildId} (actual: ${CURRENT_BUILD_ID}). Actualizando...`);
 
-      // Guard against infinite reload loops
-      const lastReloaded = sessionStorage.getItem(RELOAD_GUARD_KEY);
-      if (lastReloaded === data.buildId) {
-        return false;
-      }
-      sessionStorage.setItem(RELOAD_GUARD_KEY, data.buildId);
-
-      // 1. Purge CacheStorage
-      if ('caches' in window) {
-        try {
-          const keys = await caches.keys();
-          await Promise.all(keys.map((k) => caches.delete(k)));
-        } catch {}
+      if (!isManual) {
+        const lastReloaded = sessionStorage.getItem(RELOAD_GUARD_KEY);
+        if (lastReloaded === data.buildId) {
+          return false;
+        }
+        sessionStorage.setItem(RELOAD_GUARD_KEY, data.buildId);
       }
 
-      // 2. Update Service Workers
-      if ('serviceWorker' in navigator) {
-        try {
-          const registrations = await navigator.serviceWorker.getRegistrations();
-          for (const reg of registrations) {
-            await reg.update();
-          }
-        } catch {}
-      }
-
-      // 3. Force clean reload bypassing cache
-      const currentUrl = new URL(window.location.href);
-      currentUrl.searchParams.set('v', String(Date.now()));
-      window.location.replace(currentUrl.toString());
+      await forceHardReload();
       return true;
     }
   } catch (err) {
     console.debug('[VersionChecker] Check skipped or network error:', err);
+    if (isManual) {
+      await forceHardReload();
+      return true;
+    }
   }
 
   return false;

@@ -16,9 +16,12 @@ import {
   X,
   AlertCircle,
   Trash2,
+  RefreshCw,
+  Sparkles,
 } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { formatCurrency } from '../services/marketApi';
+import { APP_VERSION, CURRENT_BUILD_ID, checkAppVersion } from '../services/versionChecker';
 
 export const SettingsView: React.FC = () => {
   const {
@@ -58,6 +61,10 @@ export const SettingsView: React.FC = () => {
   // Make Public / Private State
   const [isPrivacyConfirmOpen, setIsPrivacyConfirmOpen] = useState<boolean>(false);
   const [privacySuccess, setPrivacySuccess] = useState<boolean>(false);
+
+  // Manual Version Update State
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState<boolean>(false);
+  const [updateStatus, setUpdateStatus] = useState<string | null>(null);
 
   const handleReset = () => {
     resetAccount(10000);
@@ -111,6 +118,20 @@ export const SettingsView: React.FC = () => {
     setIsPrivacyConfirmOpen(false);
     setPrivacySuccess(true);
     setTimeout(() => setPrivacySuccess(false), 2500);
+  };
+
+  const handleManualCheckUpdate = async () => {
+    setIsCheckingUpdate(true);
+    setUpdateStatus(null);
+    try {
+      const didUpdate = await checkAppVersion(true);
+      if (!didUpdate) {
+        setUpdateStatus('¡Tienes la última versión!');
+        setTimeout(() => setUpdateStatus(null), 3000);
+      }
+    } finally {
+      setIsCheckingUpdate(false);
+    }
   };
 
   return (
@@ -427,10 +448,10 @@ export const SettingsView: React.FC = () => {
         </div>
       </div>
 
-      {/* Virtual Capital Reset */}
+      {/* Virtual Capital Reset (Red Danger Styling) */}
       <div className="bg-white dark:bg-ios-card-dark rounded-3xl p-5 border border-black/5 dark:border-white/5 shadow-ios">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-3">
-          Reiniciar Partida
+        <h2 className="text-xs font-bold uppercase tracking-wider text-ios-red mb-3">
+          Reiniciar Cartera
         </h2>
 
         <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4">
@@ -438,9 +459,9 @@ export const SettingsView: React.FC = () => {
         </p>
 
         {isResetConfirming ? (
-          <div className="p-3.5 bg-red-500/10 border border-red-500/30 rounded-2xl space-y-2.5">
+          <div className="p-3.5 bg-red-500/10 border border-red-500/30 rounded-2xl space-y-2.5 animate-fadeIn">
             <span className="text-xs font-medium text-ios-red block">
-              ¿Seguro? Se borrarán todas las posiciones y el historial para reiniciar con {formatCurrency(10000, 'USD', false, true)}.
+              ¿Seguro? Se borrarán todas las posiciones y el historial de esta partida para reiniciar con {formatCurrency(10000, 'USD', false, true)}.
             </span>
             <div className="flex gap-2">
               <button
@@ -463,7 +484,7 @@ export const SettingsView: React.FC = () => {
           <button
             type="button"
             onClick={() => setIsResetConfirming(true)}
-            className="w-full py-3 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 text-xs font-bold flex items-center justify-center gap-2 ios-active hover:bg-zinc-200 dark:hover:bg-zinc-700"
+            className="w-full py-3 rounded-2xl bg-red-500/10 text-ios-red text-xs font-bold flex items-center justify-center gap-2 ios-active hover:bg-red-500/20"
           >
             <RotateCcw className="w-4 h-4" />
             Reiniciar Cartera con {formatCurrency(10000, 'USD', false, true)}
@@ -522,6 +543,33 @@ export const SettingsView: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* App Version & Manual Update Card */}
+      <div className="p-4 bg-zinc-100/80 dark:bg-zinc-900/60 rounded-3xl border border-black/5 dark:border-white/5 flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
+              Stock Game v{APP_VERSION}
+            </span>
+            <span className="text-[10px] font-mono text-zinc-400">
+              ({CURRENT_BUILD_ID.slice(0, 7)})
+            </span>
+          </div>
+          <p className="text-[10px] text-zinc-400 mt-0.5">
+            {updateStatus || 'Comprobación automática activa'}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleManualCheckUpdate}
+          disabled={isCheckingUpdate}
+          className="py-1.5 px-3 rounded-xl bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-xs font-semibold shadow-sm border border-black/5 dark:border-white/10 ios-active flex items-center gap-1.5 disabled:opacity-60"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${isCheckingUpdate ? 'animate-spin text-ios-blue' : 'text-zinc-500'}`} />
+          <span>{isCheckingUpdate ? 'Buscando...' : 'Actualizar'}</span>
+        </button>
+      </div>
     </div>
   );
 };
