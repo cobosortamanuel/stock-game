@@ -279,7 +279,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         new Set([...watchlist, ...positions.map((p) => p.symbol), 'TTWO', 'NVDA', 'AAPL', 'TSLA', 'BTC-USD'])
       );
 
-      const quotesMap: Record<string, StockQuote> = { ...liveQuotes };
+      const quotesMap: Record<string, StockQuote> = {};
 
       await Promise.all(
         symbolsToFetch.map(async (sym) => {
@@ -294,12 +294,13 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         })
       );
 
-      setLiveQuotes(quotesMap);
+      setLiveQuotes((prev) => ({ ...prev, ...quotesMap }));
 
       setPositions((prevPositions) =>
         prevPositions.map((pos) => {
           const currentQuote = quotesMap[pos.symbol];
-          const curPrice = currentQuote ? currentQuote.price : pos.currentPrice;
+          if (!currentQuote) return pos;
+          const curPrice = currentQuote.price;
 
           let unrealizedPnL = 0;
           let unrealizedPnLPercent = 0;
@@ -327,17 +328,17 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } finally {
       setIsSyncing(false);
     }
-  }, [watchlist, positions, liveQuotes]);
+  }, [watchlist, positions]);
 
-  // Periodic real market data sync
+  // Periodic real market data sync (runs on mount and on clean interval)
   useEffect(() => {
     refreshMarketData();
     const interval = setInterval(() => {
       refreshMarketData();
-    }, 20000);
+    }, 45000);
 
     return () => clearInterval(interval);
-  }, [refreshMarketData]);
+  }, []);
 
   // Portfolio Totals
   const cashInvested = useMemo(() => {
