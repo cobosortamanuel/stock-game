@@ -19,14 +19,13 @@ export const POPULAR_SYMBOLS = [
   { symbol: 'INTC', name: 'Intel Corporation', sector: 'Semiconductores', category: 'TECH', basePrice: 20.80 },
   { symbol: 'TSM', name: 'Taiwan Semiconductor Manufacturing', sector: 'Fundición de Chips', category: 'TECH', basePrice: 172.10 },
 
-  // --- Criptomonedas & Memecoins (24 Horas / 7 Días) ---
+  // --- Criptomonedas (24 Horas / 7 Días) ---
   { symbol: 'BTC-USD', name: 'Bitcoin (USD)', sector: 'Criptomoneda Líder', category: 'CRYPTO', basePrice: 78626.00 },
   { symbol: 'ETH-USD', name: 'Ethereum (USD)', sector: 'Smart Contracts', category: 'CRYPTO', basePrice: 2540.00 },
   { symbol: 'SOL-USD', name: 'Solana (USD)', sector: 'Blockchain Alta Velocidad', category: 'CRYPTO', basePrice: 138.50 },
   { symbol: 'BNB-USD', name: 'Binance Coin (USD)', sector: 'Ecosistema Binance', category: 'CRYPTO', basePrice: 542.00 },
   { symbol: 'XRP-USD', name: 'Ripple XRP (USD)', sector: 'Pagos Transfronterizos', category: 'CRYPTO', basePrice: 0.58 },
   { symbol: 'DOGE-USD', name: 'Dogecoin (USD)', sector: 'Memecoin de Red', category: 'CRYPTO', basePrice: 0.10 },
-  { symbol: 'CYBERLEEK-USD', name: 'CyberLeek USD', sector: 'Memecoin Comunitaria', category: 'CRYPTO', basePrice: 0.0028 },
   { symbol: 'COIN', name: 'Coinbase Global, Inc.', sector: 'Crypto Exchange', category: 'CRYPTO', basePrice: 218.60 },
 
   // --- Automotriz & Movilidad ---

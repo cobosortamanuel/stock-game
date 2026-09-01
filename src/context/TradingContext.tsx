@@ -72,7 +72,7 @@ const STORAGE_KEYS = {
 };
 
 const DEFAULT_INITIAL_BALANCE = 100000;
-const DEFAULT_WATCHLIST = ['TTWO', 'NVDA', 'AAPL', 'TSLA', 'MSFT', 'BTC-USD', 'AMZN', 'GOOGL', 'SPY'];
+const DEFAULT_WATCHLIST = ['NVDA', 'AAPL', 'TSLA', 'MSFT', 'BTC-USD', 'AMZN', 'GOOGL', 'SPY'];
 
 export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Theme State
