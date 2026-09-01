@@ -75,7 +75,7 @@ function getTimeRangeParams(range: TimeRange, symbol: string): { range: string; 
   }
 }
 
-// Fetch live Stock Quote and Chart directly from authentic market feeds via Supabase Edge Function & Resilient Fallbacks
+// Fetch live Stock Quote and Chart directly from authentic market feeds via Supabase Edge Function
 export async function fetchStockData(
   symbol: string,
   range: TimeRange = '1D'
@@ -99,17 +99,13 @@ export async function fetchStockData(
       url: `https://api.allorigins.win/raw?url=${encodeURIComponent(targetYahooUrl)}`,
       headers: {},
     },
-    {
-      url: `/api/market/chart/${cleanSymbol}?range=${apiRange}&interval=${interval}`,
-      headers: {},
-    },
   ];
 
   for (const config of fetchConfigs) {
     try {
       const response = await fetch(config.url, {
         headers: config.headers,
-        signal: AbortSignal.timeout(4000),
+        signal: AbortSignal.timeout(4500),
       });
 
       if (response.ok) {
@@ -162,7 +158,6 @@ export async function fetchStockData(
           if (range === '1H' && chartPoints.length > 30) {
             chartPoints = chartPoints.slice(-30);
           } else if (range === '1D' && isCrypto && chartPoints.length > 288) {
-            // Keep a complete continuous 24h rolling day window for crypto (288 5m candles = 24h)
             chartPoints = chartPoints.slice(-288);
           }
 

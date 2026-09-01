@@ -222,9 +222,14 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Delete a game
   const deleteGame = useCallback(async (gameId: string) => {
+    const isCurrentActive = activeGameId === gameId;
+    if (isCurrentActive) {
+      setActiveGameId(null);
+      localStorage.removeItem(STORAGE_KEYS.ACTIVE_GAME_ID);
+    }
     await deleteGameById(gameId);
     const updatedList = await fetchGamesList();
-    if (activeGameId === gameId) {
+    if (isCurrentActive) {
       if (updatedList.length > 0) {
         await switchGame(updatedList[0].id);
       } else {
@@ -394,6 +399,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
     if (!activeGameId) return;
 
+    // Verify activeGameId actually exists before syncing
+    const exists = gamesList.some((g) => g.id === activeGameId);
+    if (!exists && gamesList.length > 0) return;
+
     const gamePayload: GameSaveData = {
       id: activeGameId,
       name: activeGameName,
@@ -412,7 +421,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
 
     syncGameToCloudAndLocal(gamePayload);
-  }, [activeGameId, activeGameName, initialCash, cashAvailable, cashInvested, totalNetWorth, totalPnL, totalPnLPercent, positions, tradeHistory, watchlist]);
+  }, [activeGameId, activeGameName, initialCash, cashAvailable, cashInvested, totalNetWorth, totalPnL, totalPnLPercent, positions, tradeHistory, watchlist, gamesList]);
 
   // Trade Execution: Open Position
   const openPosition = (

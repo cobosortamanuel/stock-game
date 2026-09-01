@@ -30,13 +30,20 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
   const [editingGameId, setEditingGameId] = useState<string | null>(null);
   const [editNameValue, setEditNameValue] = useState<string>('');
 
-  // Realtime subscription
+  // Realtime subscription (debounced to avoid icon flickering)
   useEffect(() => {
     fetchGamesList();
+    let debounceTimer: any = null;
     const unsub = subscribeToSupabaseRealtime(() => {
-      fetchGamesList();
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        fetchGamesList();
+      }, 1000);
     });
-    return () => unsub();
+    return () => {
+      clearTimeout(debounceTimer);
+      unsub();
+    };
   }, [fetchGamesList]);
 
   const capitalOptions = [10000, 50000, 100000, 500000, 1000000];

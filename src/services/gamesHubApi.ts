@@ -34,32 +34,21 @@ export function getAllGamesSync(): GameSummary[] {
   return [];
 }
 
-// Fetch all games (Supabase Cloud if connected + Local Cache)
+// Fetch all games (Supabase Cloud is the source of truth when connected)
 export async function fetchAllGames(): Promise<GameSummary[]> {
-  const localGames = getAllGamesSync();
-
   if (isCloudConnected()) {
     try {
       const cloudGames = await fetchGamesFromSupabase();
-      if (cloudGames && cloudGames.length > 0) {
-        const map = new Map<string, GameSummary>();
-        localGames.forEach((g) => map.set(g.id, g));
-        cloudGames.forEach((cg) => {
-          const existing = map.get(cg.id);
-          if (!existing || cg.updatedAt >= existing.updatedAt) {
-            map.set(cg.id, cg);
-          }
-        });
-        const merged = Array.from(map.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+      if (cloudGames !== null) {
         try {
-          localStorage.setItem(REGISTRY_KEY, JSON.stringify(merged));
+          localStorage.setItem(REGISTRY_KEY, JSON.stringify(cloudGames));
         } catch {}
-        return merged;
+        return cloudGames;
       }
     } catch {}
   }
 
-  return localGames;
+  return getAllGamesSync();
 }
 
 // Synchronous fetch of single game data from local storage
@@ -106,7 +95,7 @@ export function syncGameToCloudAndLocal(game: GameSaveData): boolean {
   }
 
   // 2. Update local registry
-  let localRegistry = getAllGamesSync();
+  const localRegistry = getAllGamesSync();
   const updatedRegistry = [
     summary,
     ...localRegistry.filter((g) => g.id !== game.id),
@@ -116,7 +105,7 @@ export function syncGameToCloudAndLocal(game: GameSaveData): boolean {
     localStorage.setItem(REGISTRY_KEY, JSON.stringify(updatedRegistry));
   } catch {}
 
-  // 3. Background Cloud Sync (if Supabase is connected)
+  // 3. Cloud Sync (if Supabase is connected)
   if (isCloudConnected()) {
     saveGameToSupabase(fullData).catch(() => {});
   }
@@ -124,7 +113,7 @@ export function syncGameToCloudAndLocal(game: GameSaveData): boolean {
   return true;
 }
 
-// Rename a game
+// Rename a game with immediate local & cloud update
 export async function renameGameById(gameId: string, newName: string): Promise<boolean> {
   const cleanId = gameId.trim().toUpperCase();
   const cleanName = newName.trim();
@@ -138,7 +127,7 @@ export async function renameGameById(gameId: string, newName: string): Promise<b
     return true;
   }
 
-  let localRegistry = getAllGamesSync();
+  const localRegistry = getAllGamesSync();
   const updated = localRegistry.map((g) =>
     g.id === cleanId ? { ...g, name: cleanName, updatedAt: Date.now() } : g
   );
@@ -153,7 +142,7 @@ export async function renameGameById(gameId: string, newName: string): Promise<b
 export async function loadGameData(gameId: string): Promise<GameSaveData | null> {
   const cleanId = gameId.trim().toUpperCase();
 
-  // Try local first (instant)
+  // Try local first
   const local = getSavedGameSync(cleanId);
   if (local) return local;
 
@@ -173,19 +162,23 @@ export async function loadGameData(gameId: string): Promise<GameSaveData | null>
   return null;
 }
 
-// Delete a game
+// Delete a game permanently from local storage and Supabase
 export async function deleteGameById(gameId: string): Promise<boolean> {
   const cleanId = gameId.trim().toUpperCase();
 
+  // 1. Remove from local storage immediately
   try {
     localStorage.removeItem(`${LOCAL_GAMES_PREFIX}${cleanId}`);
-    let registry = getAllGamesSync();
+    const registry = getAllGamesSync();
     const updatedRegistry = registry.filter((g) => g.id !== cleanId);
     localStorage.setItem(REGISTRY_KEY, JSON.stringify(updatedRegistry));
   } catch {}
 
+  // 2. Remove from Supabase
   if (isCloudConnected()) {
-    deleteGameFromSupabase(cleanId).catch(() => {});
+    try {
+      await deleteGameFromSupabase(cleanId);
+    } catch {}
   }
 
   return true;
