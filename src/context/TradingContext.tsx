@@ -185,7 +185,6 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const switchGame = useCallback(async (gameId: string) => {
     const data = await loadGameData(gameId);
     if (data) {
-      isReceivingRemoteUpdateRef.current = true;
       setActiveGameId(data.id);
       setActiveGameName(data.name);
       setCreatedAt(data.createdAt || Date.now());
@@ -222,7 +221,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       watchlist: DEFAULT_WATCHLIST,
     };
 
-    syncGameToCloudAndLocal(newGame);
+    await syncGameToCloudAndLocal(newGame);
     await fetchGamesList();
     await switchGame(id);
   }, [fetchGamesList, switchGame]);
@@ -478,10 +477,6 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       isReceivingRemoteUpdateRef.current = false;
       return;
     }
-
-    // Verify activeGameId actually exists before syncing
-    const exists = gamesList.some((g) => g.id === activeGameId);
-    if (!exists && gamesList.length > 0) return;
 
     const gamePayload: GameSaveData = {
       id: activeGameId,

@@ -64,8 +64,8 @@ export function getSavedGameSync(gameId: string): GameSaveData | null {
   return null;
 }
 
-// Synchronous local persistence + background Supabase sync
-export function syncGameToCloudAndLocal(game: GameSaveData): boolean {
+// Synchronous local persistence + awaited Supabase cloud sync
+export async function syncGameToCloudAndLocal(game: GameSaveData): Promise<boolean> {
   if (!game || !game.id) return false;
 
   const summary: GameSummary = {
@@ -107,7 +107,9 @@ export function syncGameToCloudAndLocal(game: GameSaveData): boolean {
 
   // 3. Cloud Sync (if Supabase is connected)
   if (isCloudConnected()) {
-    saveGameToSupabase(fullData).catch(() => {});
+    try {
+      await saveGameToSupabase(fullData);
+    } catch {}
   }
 
   return true;
