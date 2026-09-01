@@ -12,6 +12,7 @@ import {
   KeyRound,
   Dices,
   AlertCircle,
+  Search,
 } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { formatCurrency, formatPercent } from '../services/marketApi';
@@ -32,6 +33,9 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
     createGame,
     switchGame,
   } = useTrading();
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Create form state
   const [isCreating, setIsCreating] = useState<boolean>(false);
@@ -56,6 +60,15 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
       return a.id.localeCompare(b.id);
     });
   }, [gamesList, activeGameId]);
+
+  // Filtered games by search query (name or ID)
+  const filteredGames = useMemo(() => {
+    if (!searchQuery.trim()) return sortedGames;
+    const q = searchQuery.toLowerCase().trim();
+    return sortedGames.filter(
+      (g) => g.name.toLowerCase().includes(q) || g.id.toLowerCase().includes(q)
+    );
+  }, [sortedGames, searchQuery]);
 
   // Realtime subscription (debounced)
   useEffect(() => {
@@ -321,11 +334,34 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
           </div>
         )}
 
+        {/* Search Bar for Games */}
+        {gamesList.length > 0 && (
+          <div className="relative">
+            <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar partida por nombre o código ID..."
+              className="w-full pl-10 pr-9 py-2.5 rounded-2xl bg-white dark:bg-ios-card-dark border border-black/5 dark:border-white/5 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-ios-blue shadow-ios-sm"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Games List Section */}
         <div>
           <div className="flex items-center justify-between mb-3 px-1">
             <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">
-              Partidas Sincronizadas ({gamesList.length})
+              Partidas ({filteredGames.length})
             </span>
           </div>
 
@@ -334,9 +370,13 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
               <Loader2 className="w-6 h-6 animate-spin mx-auto text-ios-blue" />
               <p className="text-xs">Cargando tus partidas...</p>
             </div>
-          ) : sortedGames.length > 0 ? (
+          ) : gamesList.length > 0 && filteredGames.length === 0 ? (
+            <div className="p-8 text-center bg-white dark:bg-ios-card-dark rounded-3xl border border-black/5 dark:border-white/5 text-zinc-400 text-xs shadow-ios-sm">
+              No se encontraron partidas que coincidan con "{searchQuery}".
+            </div>
+          ) : filteredGames.length > 0 ? (
             <div className="space-y-3">
-              {sortedGames.map((game) => {
+              {filteredGames.map((game) => {
                 const isActive = game.id === activeGameId;
                 const isProfitable = (game.totalPnL || 0) >= 0;
                 const isPriv = game.isPrivate ?? true;
