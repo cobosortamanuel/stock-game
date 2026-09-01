@@ -1,14 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, Suspense, lazy } from 'react';
 import { TradingProvider, useTrading } from './context/TradingContext';
 import { Header } from './components/common/Header';
 import { TabBar, TabType } from './components/common/TabBar';
-import { SearchModal } from './components/common/SearchModal';
 import { PortfolioView } from './views/PortfolioView';
 import { MarketsView } from './views/MarketsView';
-import { StockDetailView } from './views/StockDetailView';
-import { HistoryView } from './views/HistoryView';
-import { SettingsView } from './views/SettingsView';
-import { GamesLobbyView } from './views/GamesLobbyView';
+
+// 4. Code Splitting & Dynamic Imports with React.lazy
+const StockDetailView = lazy(() => import('./views/StockDetailView').then((m) => ({ default: m.StockDetailView })));
+const HistoryView = lazy(() => import('./views/HistoryView').then((m) => ({ default: m.HistoryView })));
+const SettingsView = lazy(() => import('./views/SettingsView').then((m) => ({ default: m.SettingsView })));
+const GamesLobbyView = lazy(() => import('./views/GamesLobbyView').then((m) => ({ default: m.GamesLobbyView })));
+const SearchModal = lazy(() => import('./components/common/SearchModal').then((m) => ({ default: m.SearchModal })));
+
+function ViewFallback() {
+  return (
+    <div className="flex-1 min-h-[300px] flex items-center justify-center p-8">
+      <div className="w-6 h-6 rounded-full border-2 border-ios-blue border-t-transparent animate-spin" />
+    </div>
+  );
+}
 
 function AppContent() {
   const { positions, isLobbyOpen, closeLobby } = useTrading();
@@ -48,32 +58,34 @@ function AppContent() {
 
       {/* Main Screen Content */}
       <main className="flex-1 w-full max-w-md mx-auto">
-        {selectedSymbol ? (
-          <StockDetailView
-            symbol={selectedSymbol}
-            onBack={() => setSelectedSymbol(null)}
-          />
-        ) : (
-          <>
-            {activeTab === 'portfolio' && (
-              <PortfolioView
-                onSelectSymbol={handleSelectSymbol}
-                onExploreMarkets={() => setActiveTab('markets')}
-              />
-            )}
+        <Suspense fallback={<ViewFallback />}>
+          {selectedSymbol ? (
+            <StockDetailView
+              symbol={selectedSymbol}
+              onBack={() => setSelectedSymbol(null)}
+            />
+          ) : (
+            <>
+              {activeTab === 'portfolio' && (
+                <PortfolioView
+                  onSelectSymbol={handleSelectSymbol}
+                  onExploreMarkets={() => setActiveTab('markets')}
+                />
+              )}
 
-            {activeTab === 'markets' && (
-              <MarketsView
-                onSelectSymbol={handleSelectSymbol}
-                onOpenSearch={() => setIsSearchOpen(true)}
-              />
-            )}
+              {activeTab === 'markets' && (
+                <MarketsView
+                  onSelectSymbol={handleSelectSymbol}
+                  onOpenSearch={() => setIsSearchOpen(true)}
+                />
+              )}
 
-            {activeTab === 'history' && <HistoryView />}
+              {activeTab === 'history' && <HistoryView />}
 
-            {activeTab === 'settings' && <SettingsView />}
-          </>
-        )}
+              {activeTab === 'settings' && <SettingsView />}
+            </>
+          )}
+        </Suspense>
       </main>
 
       {/* iOS Bottom Navigation Bar - only shown when not on a specific stock detail page */}
@@ -88,18 +100,21 @@ function AppContent() {
         />
       )}
 
-      {/* Global Stock Search Modal */}
-      <SearchModal
-        isOpen={isSearchOpen}
-        onClose={() => setIsSearchOpen(false)}
-        onSelectSymbol={(sym) => {
-          setSelectedSymbol(sym);
-          setIsSearchOpen(false);
-        }}
-      />
+      {/* Global Stock Search Modal & Games Lobby */}
+      <Suspense fallback={null}>
+        {isSearchOpen && (
+          <SearchModal
+            isOpen={isSearchOpen}
+            onClose={() => setIsSearchOpen(false)}
+            onSelectSymbol={(sym) => {
+              setSelectedSymbol(sym);
+              setIsSearchOpen(false);
+            }}
+          />
+        )}
 
-      {/* Games Lobby View Modal */}
-      {isLobbyOpen && <GamesLobbyView onClose={closeLobby} />}
+        {isLobbyOpen && <GamesLobbyView onClose={closeLobby} />}
+      </Suspense>
     </div>
   );
 }

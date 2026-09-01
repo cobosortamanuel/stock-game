@@ -19,8 +19,14 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
+  const abortControllerRef = React.useRef<AbortController | null>(null);
+
   useEffect(() => {
     if (!isOpen) {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
       setQuery('');
       setResults([]);
       setSelectedCategory('ALL');
@@ -30,24 +36,43 @@ export const SearchModal: React.FC<SearchModalProps> = ({
 
   useEffect(() => {
     if (!query.trim()) {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
       setResults([]);
       setIsLoading(false);
       return;
     }
 
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     const timer = setTimeout(async () => {
       setIsLoading(true);
       try {
-        const data = await searchSymbols(query);
-        setResults(data);
-      } catch (err) {
-        console.error('Search error', err);
+        const data = await searchSymbols(query, controller.signal);
+        if (!controller.signal.aborted) {
+          setResults(data);
+        }
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          console.error('Search error', err);
+        }
       } finally {
-        setIsLoading(false);
+        if (!controller.signal.aborted) {
+          setIsLoading(false);
+        }
       }
-    }, 280);
+    }, 220);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [query]);
 
   // Filtered active list (either from search query or default catalog)

@@ -405,7 +405,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
   }, [dailyPnL, dailyPnLPercent, totalPnL, totalPnLPercent, totalNetWorth, initialCash]);
 
-  // Auto-sync game to storage whenever state changes
+  const syncDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Auto-sync game to storage whenever state changes (Debounced 400ms)
   useEffect(() => {
     if (!isHydrated.current) {
       isHydrated.current = true;
@@ -434,7 +436,19 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       watchlist,
     };
 
-    syncGameToCloudAndLocal(gamePayload);
+    if (syncDebounceTimerRef.current) {
+      clearTimeout(syncDebounceTimerRef.current);
+    }
+
+    syncDebounceTimerRef.current = setTimeout(() => {
+      syncGameToCloudAndLocal(gamePayload);
+    }, 400);
+
+    return () => {
+      if (syncDebounceTimerRef.current) {
+        clearTimeout(syncDebounceTimerRef.current);
+      }
+    };
   }, [activeGameId, activeGameName, initialCash, cashAvailable, cashInvested, totalNetWorth, totalPnL, totalPnLPercent, positions, tradeHistory, watchlist, gamesList]);
 
   // Trade Execution: Open Position

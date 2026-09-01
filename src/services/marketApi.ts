@@ -422,12 +422,38 @@ function getTimeRangeParams(range: TimeRange, symbol: string): { range: string; 
   }
 }
 
+const stockDataCache = new Map<string, { data: { quote: StockQuote; chart: ChartPoint[] }; timestamp: number }>();
+const CACHE_TTL_MS = 60_000;
+
+export function clearStockCache(symbol?: string) {
+  if (symbol) {
+    const prefix = `${symbol.toUpperCase()}_`;
+    for (const key of stockDataCache.keys()) {
+      if (key.startsWith(prefix)) stockDataCache.delete(key);
+    }
+  } else {
+    stockDataCache.clear();
+  }
+}
+
 // Fetch live Stock Quote and Chart directly from authentic market feeds via Supabase Edge Function
 export async function fetchStockData(
   symbol: string,
-  range: TimeRange = '1D'
+  range: TimeRange = '1D',
+  signal?: AbortSignal,
+  forceRefresh: boolean = false
 ): Promise<{ quote: StockQuote; chart: ChartPoint[] } | null> {
   const cleanSymbol = symbol.trim().toUpperCase();
+  const cacheKey = `${cleanSymbol}_${range}`;
+
+  // Return from 60s in-memory cache if fresh
+  if (!forceRefresh) {
+    const cached = stockDataCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+      return cached.data;
+    }
+  }
+
   const isCrypto = cleanSymbol.includes('BTC') || cleanSymbol.includes('ETH') || cleanSymbol.includes('USD');
   const { range: apiRange, interval } = getTimeRangeParams(range, cleanSymbol);
 
@@ -439,7 +465,7 @@ export async function fetchStockData(
         'apikey': SUPABASE_ANON_KEY,
         'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
       },
-      signal: AbortSignal.timeout(5000),
+      signal: signal || AbortSignal.timeout(5000),
     });
 
     if (response.ok) {
@@ -527,7 +553,9 @@ export async function fetchStockData(
         };
 
         if (chartPoints.length > 0) {
-          return { quote, chart: chartPoints };
+          const payload = { quote, chart: chartPoints };
+          stockDataCache.set(cacheKey, { data: payload, timestamp: Date.now() });
+          return payload;
         }
       }
     }
@@ -540,7 +568,7 @@ export async function fetchStockData(
 }
 
 // Search companies globally by ticker or name
-export async function searchSymbols(query: string): Promise<SearchResult[]> {
+export async function searchSymbols(query: string, signal?: AbortSignal): Promise<SearchResult[]> {
   const cleanQ = query.trim();
   if (!cleanQ) return [];
 
@@ -566,7 +594,7 @@ export async function searchSymbols(query: string): Promise<SearchResult[]> {
         'apikey': SUPABASE_ANON_KEY,
         'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
       },
-      signal: AbortSignal.timeout(3500),
+      signal: signal || AbortSignal.timeout(3500),
     });
 
     if (res.ok) {
