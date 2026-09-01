@@ -198,6 +198,20 @@ export async function updateGamePinById(gameId: string, newPin: string, isPrivat
   return false;
 }
 
+// Set a game Privacy (Public vs Private) with immediate local & cloud update
+export async function setGamePrivacyById(gameId: string, isPrivate: boolean, pinCode?: string): Promise<boolean> {
+  const cleanId = gameId.trim().toUpperCase();
+  const existing = await loadGameData(cleanId);
+  if (existing) {
+    existing.isPrivate = isPrivate;
+    existing.pinCode = isPrivate ? (pinCode || existing.pinCode || '1234') : undefined;
+    existing.updatedAt = Date.now();
+    await syncGameToCloudAndLocal(existing);
+    return true;
+  }
+  return false;
+}
+
 // Load a specific game's full data (Cloud source of truth when connected)
 export async function loadGameData(gameId: string): Promise<GameSaveData | null> {
   const cleanId = gameId.trim().toUpperCase();

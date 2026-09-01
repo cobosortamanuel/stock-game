@@ -46,10 +46,6 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
   const [pinCode, setPinCode] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  // Renaming state
-  const [editingGameId, setEditingGameId] = useState<string | null>(null);
-  const [editNameValue, setEditNameValue] = useState<string>('');
-
   // Delete state
   const [gameToDelete, setGameToDelete] = useState<string | null>(null);
 
@@ -57,6 +53,7 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
   const [pinModalGame, setPinModalGame] = useState<GameSummary | null>(null);
   const [pinInput, setPinInput] = useState<string>('');
   const [pinError, setPinError] = useState<string | null>(null);
+  const [pendingActionAfterUnlock, setPendingActionAfterUnlock] = useState<'enter' | 'delete' | null>(null);
 
   // Realtime subscription (debounced)
   useEffect(() => {
@@ -96,16 +93,16 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
     }
   };
 
-  const startRenaming = (id: string, currentName: string) => {
-    setEditingGameId(id);
-    setEditNameValue(currentName);
-  };
-
-  const saveRenaming = async (id: string) => {
-    if (editNameValue.trim()) {
-      await renameGame(id, editNameValue.trim());
+  const handleDeleteTrigger = (game: GameSummary) => {
+    const unlocked = isGameUnlocked(game);
+    if (!unlocked) {
+      setPinModalGame(game);
+      setPendingActionAfterUnlock('delete');
+      setPinInput('');
+      setPinError(null);
+      return;
     }
-    setEditingGameId(null);
+    setGameToDelete(game.id);
   };
 
   const handleDeleteConfirm = async (id: string) => {
@@ -120,20 +117,29 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
       onClose();
     } else {
       setPinModalGame(game);
+      setPendingActionAfterUnlock('enter');
       setPinInput('');
       setPinError(null);
     }
   };
 
-  const handleUnlockAndEnter = async (e: React.FormEvent) => {
+  const handleUnlockAndAction = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!pinModalGame) return;
     const ok = unlockGame(pinModalGame, pinInput);
     if (ok) {
+      const action = pendingActionAfterUnlock;
+      const targetId = pinModalGame.id;
       setPinError(null);
       setPinModalGame(null);
-      await switchGame(pinModalGame.id);
-      onClose();
+      setPendingActionAfterUnlock(null);
+
+      if (action === 'delete') {
+        await deleteGame(targetId);
+      } else {
+        await switchGame(targetId);
+        onClose();
+      }
     } else {
       setPinError('PIN incorrecto. Vuelve a intentarlo.');
     }
@@ -361,8 +367,6 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
                 const date = new Date(game.updatedAt);
                 const timeAgo = `${date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric' })} ${date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
 
-                const isEditingThis = editingGameId === game.id;
-
                 return (
                   <div
                     key={game.id}
@@ -372,79 +376,38 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
                         : 'border-black/5 dark:border-white/5 hover:border-black/20 dark:hover:border-white/20'
                     }`}
                   >
-                    {/* Header: Name, Privacy Badge & Actions */}
+                    {/* Header: Name, Privacy Badge & Delete Action */}
                     <div className="flex items-start justify-between">
                       <div className="flex-1 mr-2">
-                        {isEditingThis ? (
-                          <div className="flex items-center gap-1.5 mb-1">
-                            <input
-                              type="text"
-                              autoFocus
-                              value={editNameValue}
-                              onChange={(e) => setEditNameValue(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') saveRenaming(game.id);
-                                if (e.key === 'Escape') setEditingGameId(null);
-                              }}
-                              className="px-2.5 py-1 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-sm font-bold text-zinc-900 dark:text-zinc-50 border border-ios-blue focus:outline-none w-full"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => saveRenaming(game.id)}
-                              className="p-1.5 rounded-xl bg-ios-green text-white text-xs ios-active"
-                              title="Guardar nombre"
-                            >
-                              <Check className="w-4 h-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setEditingGameId(null)}
-                              className="p-1.5 rounded-xl bg-zinc-200 dark:bg-zinc-700 text-zinc-500 text-xs ios-active"
-                              title="Cancelar"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-bold text-base text-zinc-900 dark:text-zinc-50 truncate">
-                              {game.name}
-                            </h3>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-bold text-base text-zinc-900 dark:text-zinc-50 truncate">
+                            {game.name}
+                          </h3>
 
-                            {isPriv ? (
-                              <span
-                                title="Partida Privada"
-                                className="px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-[10px] font-bold flex items-center gap-1"
-                              >
-                                <Lock className="w-2.5 h-2.5 text-amber-500" />
-                                <span>{unlocked ? 'Desbloqueada' : 'PIN'}</span>
-                              </span>
-                            ) : (
-                              <span
-                                title="Partida Pública"
-                                className="px-2 py-0.5 rounded-full bg-ios-blue/15 text-ios-blue text-[10px] font-bold flex items-center gap-1"
-                              >
-                                <Globe className="w-2.5 h-2.5" />
-                                <span>Pública</span>
-                              </span>
-                            )}
-
-                            <button
-                              type="button"
-                              onClick={() => startRenaming(game.id, game.name)}
-                              className="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 ios-active"
-                              title="Renombrar partida"
+                          {isPriv ? (
+                            <span
+                              title="Partida Privada"
+                              className="px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-[10px] font-bold flex items-center gap-1"
                             >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
+                              <Lock className="w-2.5 h-2.5 text-amber-500" />
+                              <span>{unlocked ? 'Desbloqueada' : 'PIN'}</span>
+                            </span>
+                          ) : (
+                            <span
+                              title="Partida Pública"
+                              className="px-2 py-0.5 rounded-full bg-ios-blue/15 text-ios-blue text-[10px] font-bold flex items-center gap-1"
+                            >
+                              <Globe className="w-2.5 h-2.5" />
+                              <span>Pública</span>
+                            </span>
+                          )}
 
-                            {isActive && (
-                              <span className="px-2 py-0.5 rounded-full bg-ios-blue/15 text-ios-blue text-[10px] font-bold tracking-wider uppercase border border-ios-blue/30">
-                                Activa
-                              </span>
-                            )}
-                          </div>
-                        )}
+                          {isActive && (
+                            <span className="px-2 py-0.5 rounded-full bg-ios-blue/15 text-ios-blue text-[10px] font-bold tracking-wider uppercase border border-ios-blue/30">
+                              Activa
+                            </span>
+                          )}
+                        </div>
 
                         <p className="text-[11px] text-zinc-400 font-mono mt-0.5">
                           ID: {game.id} • Actualizado: {timeAgo}
@@ -472,7 +435,7 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
                       ) : (
                         <button
                           type="button"
-                          onClick={() => setGameToDelete(game.id)}
+                          onClick={() => handleDeleteTrigger(game)}
                           className="p-2 text-zinc-400 hover:text-ios-red ios-active"
                           title="Eliminar partida"
                         >
@@ -577,13 +540,14 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
                   <KeyRound className="w-4 h-4" />
                 </div>
                 <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-50">
-                  Desbloquear Partida
+                  {pendingActionAfterUnlock === 'delete' ? 'Confirmar PIN para Eliminar' : 'Desbloquear Partida'}
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => {
                   setPinModalGame(null);
+                  setPendingActionAfterUnlock(null);
                   setPinInput('');
                   setPinError(null);
                 }}
@@ -594,10 +558,12 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
             </div>
 
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Introduce el PIN de <strong>"{pinModalGame.name}"</strong> para entrar y operar en este dispositivo:
+              {pendingActionAfterUnlock === 'delete'
+                ? `Introduce el PIN de "${pinModalGame.name}" para autorizar su eliminación:`
+                : `Introduce el PIN de "${pinModalGame.name}" para entrar y operar en este dispositivo:`}
             </p>
 
-            <form onSubmit={handleUnlockAndEnter} className="space-y-3">
+            <form onSubmit={handleUnlockAndAction} className="space-y-3">
               <input
                 type="password"
                 autoFocus
@@ -621,14 +587,17 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
                 <button
                   type="submit"
                   disabled={!pinInput.trim()}
-                  className="flex-1 py-3 rounded-2xl bg-amber-500 text-white font-bold text-xs shadow-md ios-active disabled:opacity-50"
+                  className={`flex-1 py-3 rounded-2xl text-white font-bold text-xs shadow-md ios-active disabled:opacity-50 ${
+                    pendingActionAfterUnlock === 'delete' ? 'bg-ios-red' : 'bg-amber-500'
+                  }`}
                 >
-                  Desbloquear y Entrar
+                  {pendingActionAfterUnlock === 'delete' ? 'Desbloquear y Eliminar' : 'Desbloquear y Entrar'}
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     setPinModalGame(null);
+                    setPendingActionAfterUnlock(null);
                     setPinInput('');
                     setPinError(null);
                   }}

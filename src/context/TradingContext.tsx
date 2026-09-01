@@ -14,6 +14,7 @@ import {
   isGameUnlocked,
   unlockGame,
   updateGamePinById,
+  setGamePrivacyById,
 } from '../services/gamesHubApi';
 import { subscribeToSupabaseRealtime } from '../services/supabaseService';
 
@@ -30,6 +31,7 @@ interface TradingContextType {
   currentGamePin?: string;
   unlockCurrentGame: (enteredPin: string) => boolean;
   updatePin: (newPin: string) => Promise<boolean>;
+  setGamePrivacy: (isPrivate: boolean, pinCode?: string) => Promise<boolean>;
   gamesList: GameSummary[];
   isLobbyOpen: boolean;
   isLoadingGames: boolean;
@@ -290,6 +292,23 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     markGameUnlockedLocally(activeGameId);
     setUnlockedStateNonce((v) => v + 1);
     await updateGamePinById(activeGameId, cleanPin, true);
+    await fetchGamesList();
+    return true;
+  }, [activeGameId, fetchGamesList]);
+
+  // Set active game Privacy (Public vs Private)
+  const setGamePrivacy = useCallback(async (isPrivate: boolean, pinCode?: string): Promise<boolean> => {
+    if (!activeGameId) return false;
+    setIsCurrentGamePrivate(isPrivate);
+    if (!isPrivate) {
+      setCurrentGamePin(undefined);
+    } else if (pinCode) {
+      const cleanPin = pinCode.trim();
+      setCurrentGamePin(cleanPin);
+      markGameUnlockedLocally(activeGameId);
+      setUnlockedStateNonce((v) => v + 1);
+    }
+    await setGamePrivacyById(activeGameId, isPrivate, pinCode);
     await fetchGamesList();
     return true;
   }, [activeGameId, fetchGamesList]);
@@ -744,6 +763,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         createGame,
         renameGame,
         updatePin,
+        setGamePrivacy,
         switchGame,
         deleteGame,
         isInstallable,
