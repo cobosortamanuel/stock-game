@@ -1,7 +1,7 @@
 import React from 'react';
-import { PieChart, TrendingUp, History, Settings2 } from 'lucide-react';
+import { PieChart, TrendingUp, History, Trophy, Settings2 } from 'lucide-react';
 
-export type TabType = 'portfolio' | 'markets' | 'history' | 'settings';
+export type TabType = 'portfolio' | 'markets' | 'history' | 'ranking' | 'settings';
 
 interface TabBarProps {
   activeTab: TabType;
@@ -30,6 +30,11 @@ export const TabBar: React.FC<TabBarProps> = ({
       id: 'history' as TabType,
       label: 'Historial',
       icon: History,
+    },
+    {
+      id: 'ranking' as TabType,
+      label: 'Ranking',
+      icon: Trophy,
     },
     {
       id: 'settings' as TabType,

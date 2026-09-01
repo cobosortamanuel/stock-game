@@ -8,6 +8,7 @@ import { MarketsView } from './views/MarketsView';
 // 4. Code Splitting & Dynamic Imports with React.lazy
 const StockDetailView = lazy(() => import('./views/StockDetailView').then((m) => ({ default: m.StockDetailView })));
 const HistoryView = lazy(() => import('./views/HistoryView').then((m) => ({ default: m.HistoryView })));
+const RankingView = lazy(() => import('./views/RankingView').then((m) => ({ default: m.RankingView })));
 const SettingsView = lazy(() => import('./views/SettingsView').then((m) => ({ default: m.SettingsView })));
 const GamesLobbyView = lazy(() => import('./views/GamesLobbyView').then((m) => ({ default: m.GamesLobbyView })));
 const SearchModal = lazy(() => import('./components/common/SearchModal').then((m) => ({ default: m.SearchModal })));
@@ -39,6 +40,8 @@ function AppContent() {
         return 'Mercados';
       case 'history':
         return 'Historial';
+      case 'ranking':
+        return 'Ranking Global';
       case 'settings':
         return 'Ajustes';
       default:
@@ -81,6 +84,8 @@ function AppContent() {
               )}
 
               {activeTab === 'history' && <HistoryView />}
+
+              {activeTab === 'ranking' && <RankingView />}
 
               {activeTab === 'settings' && <SettingsView />}
             </>

@@ -111,6 +111,8 @@ export interface GameSummary {
   totalPnL: number;
   totalPnLPercent: number;
   positionsCount: number;
+  isPrivate?: boolean;
+  pinCode?: string;
 }
 
 export interface GameSaveData extends GameSummary {

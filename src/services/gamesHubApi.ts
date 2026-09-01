@@ -64,6 +64,43 @@ export function getSavedGameSync(gameId: string): GameSaveData | null {
   return null;
 }
 
+const UNLOCKED_GAMES_KEY = 'stock_unlocked_games_v1';
+
+export function getUnlockedGames(): Record<string, boolean> {
+  try {
+    const saved = localStorage.getItem(UNLOCKED_GAMES_KEY);
+    if (saved) return JSON.parse(saved);
+  } catch {}
+  return {};
+}
+
+export function markGameUnlockedLocally(gameId: string): void {
+  try {
+    const cleanId = gameId.trim().toUpperCase();
+    const current = getUnlockedGames();
+    current[cleanId] = true;
+    localStorage.setItem(UNLOCKED_GAMES_KEY, JSON.stringify(current));
+  } catch {}
+}
+
+export function isGameUnlocked(game: { id: string; isPrivate?: boolean; pinCode?: string }): boolean {
+  if (!game.isPrivate) return true;
+  const cleanId = game.id.trim().toUpperCase();
+  const unlocked = getUnlockedGames();
+  return !!unlocked[cleanId];
+}
+
+export function unlockGame(game: { id: string; isPrivate?: boolean; pinCode?: string }, enteredPin: string): boolean {
+  if (!game.isPrivate) return true;
+  const actualPin = (game.pinCode || '').trim();
+  const inputPin = enteredPin.trim();
+  if (!actualPin || actualPin === inputPin) {
+    markGameUnlockedLocally(game.id);
+    return true;
+  }
+  return false;
+}
+
 // Synchronous local persistence + awaited Supabase cloud sync
 export async function syncGameToCloudAndLocal(game: GameSaveData): Promise<boolean> {
   if (!game || !game.id) return false;
@@ -80,10 +117,14 @@ export async function syncGameToCloudAndLocal(game: GameSaveData): Promise<boole
     totalPnL: game.totalPnL,
     totalPnLPercent: game.totalPnLPercent,
     positionsCount: game.positions ? game.positions.length : 0,
+    isPrivate: game.isPrivate ?? true,
+    pinCode: game.pinCode,
   };
 
   const fullData: GameSaveData = {
     ...game,
+    isPrivate: summary.isPrivate,
+    pinCode: summary.pinCode,
     updatedAt: summary.updatedAt,
   };
 

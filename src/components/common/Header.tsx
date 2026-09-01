@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Moon, Sun, RefreshCw, TrendingUp } from 'lucide-react';
+import { Search, Moon, Sun, RefreshCw, TrendingUp, Lock, Globe } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 
 interface HeaderProps {
@@ -13,7 +13,16 @@ export const Header: React.FC<HeaderProps> = ({
   subtitle,
   onOpenSearch,
 }) => {
-  const { isDarkMode, toggleDarkMode, isSyncing, refreshMarketData, activeGameName, openLobby } = useTrading();
+  const {
+    isDarkMode,
+    toggleDarkMode,
+    isSyncing,
+    refreshMarketData,
+    activeGameName,
+    isCurrentGamePrivate,
+    isCurrentGameUnlocked,
+    openLobby,
+  } = useTrading();
 
   return (
     <header className="sticky top-0 z-30 w-full pt-safe ios-glass-header border-b border-black/5 dark:border-white/10 transition-colors duration-200">
@@ -30,11 +39,18 @@ export const Header: React.FC<HeaderProps> = ({
               <TrendingUp className="w-4 h-4 stroke-[2.5]" />
             </div>
             <div>
-              <span className="text-sm font-bold text-zinc-900 dark:text-zinc-50 leading-tight block truncate max-w-[150px] sm:max-w-[200px]">
-                {activeGameName || title}
-              </span>
+              <div className="flex items-center gap-1">
+                <span className="text-sm font-bold text-zinc-900 dark:text-zinc-50 leading-tight block truncate max-w-[130px] sm:max-w-[180px]">
+                  {activeGameName || title}
+                </span>
+                {isCurrentGamePrivate ? (
+                  <Lock className="w-3 h-3 text-amber-500 shrink-0" />
+                ) : (
+                  <Globe className="w-3 h-3 text-ios-blue shrink-0" />
+                )}
+              </div>
               <p className="text-[11px] text-ios-blue font-bold tracking-tight">
-                Partida
+                {isCurrentGamePrivate && !isCurrentGameUnlocked ? 'Modo Espectador' : 'Partida'}
               </p>
             </div>
           </button>

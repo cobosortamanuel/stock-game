@@ -1,8 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { PlusCircle, Trash2, ChevronRight, X, Loader2, RefreshCw, Pencil, Check, FolderKanban, Cloud } from 'lucide-react';
+import {
+  PlusCircle,
+  Trash2,
+  ChevronRight,
+  X,
+  Loader2,
+  RefreshCw,
+  Pencil,
+  Check,
+  FolderKanban,
+  Cloud,
+  Lock,
+  Globe,
+  KeyRound,
+  Dices,
+  AlertCircle,
+  ShieldCheck,
+} from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { formatCurrency, formatPercent } from '../services/marketApi';
 import { subscribeToSupabaseRealtime } from '../services/supabaseService';
+import { isGameUnlocked, unlockGame, markGameUnlockedLocally } from '../services/gamesHubApi';
+import { GameSummary } from '../types/market';
 
 interface GamesLobbyViewProps {
   onClose: () => void;
@@ -20,17 +39,26 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
     deleteGame,
   } = useTrading();
 
+  // Create form state
   const [isCreating, setIsCreating] = useState<boolean>(false);
   const [newGameName, setNewGameName] = useState<string>('');
-  const [selectedCapital, setSelectedCapital] = useState<number>(100000);
-  const [gameToDelete, setGameToDelete] = useState<string | null>(null);
+  const [isPrivate, setIsPrivate] = useState<boolean>(true); // Default private as requested
+  const [pinCode, setPinCode] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   // Renaming state
   const [editingGameId, setEditingGameId] = useState<string | null>(null);
   const [editNameValue, setEditNameValue] = useState<string>('');
 
-  // Realtime subscription (debounced to avoid icon flickering)
+  // Delete state
+  const [gameToDelete, setGameToDelete] = useState<string | null>(null);
+
+  // PIN Unlock Modal for Locked Games
+  const [pinModalGame, setPinModalGame] = useState<GameSummary | null>(null);
+  const [pinInput, setPinInput] = useState<string>('');
+  const [pinError, setPinError] = useState<string | null>(null);
+
+  // Realtime subscription (debounced)
   useEffect(() => {
     fetchGamesList();
     let debounceTimer: any = null;
@@ -46,15 +74,21 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
     };
   }, [fetchGamesList]);
 
-  const capitalOptions = [10000, 50000, 100000, 500000, 1000000];
+  // Generate 4-digit PIN helper
+  const handleGeneratePin = () => {
+    const randomPin = Math.floor(1000 + Math.random() * 9000).toString();
+    setPinCode(randomPin);
+  };
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
-      await createGame(newGameName.trim() || 'Nueva Partida', selectedCapital);
+      const finalPin = isPrivate ? (pinCode.trim() || Math.floor(1000 + Math.random() * 9000).toString()) : undefined;
+      await createGame(newGameName.trim() || 'Nueva Partida', isPrivate, finalPin);
       setNewGameName('');
+      setPinCode('');
       setIsCreating(false);
       onClose();
     } finally {
@@ -77,6 +111,32 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
   const handleDeleteConfirm = async (id: string) => {
     await deleteGame(id);
     setGameToDelete(null);
+  };
+
+  const handleEnterGame = async (game: GameSummary) => {
+    const isUnlocked = isGameUnlocked(game);
+    if (isUnlocked) {
+      await switchGame(game.id);
+      onClose();
+    } else {
+      setPinModalGame(game);
+      setPinInput('');
+      setPinError(null);
+    }
+  };
+
+  const handleUnlockAndEnter = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pinModalGame) return;
+    const ok = unlockGame(pinModalGame, pinInput);
+    if (ok) {
+      setPinError(null);
+      setPinModalGame(null);
+      await switchGame(pinModalGame.id);
+      onClose();
+    } else {
+      setPinError('PIN incorrecto. Vuelve a intentarlo.');
+    }
   };
 
   const canClose = gamesList.length > 0;
@@ -175,34 +235,88 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
                   autoFocus
                   value={newGameName}
                   onChange={(e) => setNewGameName(e.target.value)}
-                  placeholder="Ej: Reto $10k, Take Two Only, Cortos..."
+                  placeholder="Ej: Reto 10k, Mis Inversiones..."
                   className="w-full px-3.5 py-2.5 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-sm text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 border border-black/5 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-ios-blue"
                 />
               </div>
 
+              {/* Fixed Budget Badge */}
+              <div className="p-3 bg-zinc-100 dark:bg-zinc-800/70 rounded-2xl flex items-center justify-between text-xs">
+                <span className="text-zinc-500 dark:text-zinc-400 font-medium">
+                  Presupuesto Inicial:
+                </span>
+                <span className="font-mono font-bold text-zinc-900 dark:text-zinc-100">
+                  {formatCurrency(10000)}
+                </span>
+              </div>
+
+              {/* Privacy Selector */}
               <div>
                 <label className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 block mb-1.5">
-                  Capital Inicial de Inicio (USD):
+                  Visibilidad y Privacidad:
                 </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {capitalOptions.map((cap) => (
-                    <button
-                      key={cap}
-                      type="button"
-                      onClick={() => setSelectedCapital(cap)}
-                      className={`py-2 px-2 rounded-xl text-xs font-mono font-bold border transition-all ios-active ${
-                        selectedCapital === cap
-                          ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 border-transparent shadow-sm'
-                          : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border-black/5 dark:border-white/5'
-                      }`}
-                    >
-                      {formatCurrency(cap, 'USD', true)}
-                    </button>
-                  ))}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsPrivate(true)}
+                    className={`py-2.5 px-3 rounded-2xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 ios-active ${
+                      isPrivate
+                        ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 border-transparent shadow-sm'
+                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-black/5 dark:border-white/5'
+                    }`}
+                  >
+                    <Lock className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Privada (con PIN)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsPrivate(false)}
+                    className={`py-2.5 px-3 rounded-2xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 ios-active ${
+                      !isPrivate
+                        ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 border-transparent shadow-sm'
+                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-black/5 dark:border-white/5'
+                    }`}
+                  >
+                    <Globe className="w-3.5 h-3.5 text-ios-blue" />
+                    <span>Pública</span>
+                  </button>
                 </div>
               </div>
 
-              <div className="flex gap-2 pt-2">
+              {/* PIN Code Setup for Private Game */}
+              {isPrivate && (
+                <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-2xl space-y-2.5 animate-fadeIn">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+                      <KeyRound className="w-3.5 h-3.5" />
+                      <span>PIN de Seguridad:</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleGeneratePin}
+                      className="text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1"
+                    >
+                      <Dices className="w-3.5 h-3.5" />
+                      <span>Generar PIN</span>
+                    </button>
+                  </div>
+
+                  <input
+                    type="text"
+                    value={pinCode}
+                    onChange={(e) => setPinCode(e.target.value)}
+                    placeholder="Ej: 1234 (o pulsa generar)"
+                    className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-zinc-900 text-sm font-mono tracking-widest text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 border border-black/5 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+
+                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400 leading-tight">
+                    En este dispositivo se quedará desbloqueada automáticamente. Guarda el PIN si quieres entrar desde tu móvil u otro dispositivo.
+                  </p>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-1">
                 <button
                   type="submit"
                   disabled={isSubmitting}
@@ -242,6 +356,8 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
               {gamesList.map((game) => {
                 const isActive = game.id === activeGameId;
                 const isProfitable = (game.totalPnL || 0) >= 0;
+                const isPriv = game.isPrivate ?? true;
+                const unlocked = isGameUnlocked(game);
                 const date = new Date(game.updatedAt);
                 const timeAgo = `${date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric' })} ${date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
 
@@ -256,7 +372,7 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
                         : 'border-black/5 dark:border-white/5 hover:border-black/20 dark:hover:border-white/20'
                     }`}
                   >
-                    {/* Header: Name, Rename & Delete */}
+                    {/* Header: Name, Privacy Badge & Actions */}
                     <div className="flex items-start justify-between">
                       <div className="flex-1 mr-2">
                         {isEditingThis ? (
@@ -291,9 +407,28 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
                           </div>
                         ) : (
                           <div className="flex items-center gap-2">
-                            <h3 className="font-bold text-base text-zinc-900 dark:text-zinc-50">
+                            <h3 className="font-bold text-base text-zinc-900 dark:text-zinc-50 truncate">
                               {game.name}
                             </h3>
+
+                            {isPriv ? (
+                              <span
+                                title="Partida Privada"
+                                className="px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-[10px] font-bold flex items-center gap-1"
+                              >
+                                <Lock className="w-2.5 h-2.5 text-amber-500" />
+                                <span>{unlocked ? 'Desbloqueada' : 'PIN'}</span>
+                              </span>
+                            ) : (
+                              <span
+                                title="Partida Pública"
+                                className="px-2 py-0.5 rounded-full bg-ios-blue/15 text-ios-blue text-[10px] font-bold flex items-center gap-1"
+                              >
+                                <Globe className="w-2.5 h-2.5" />
+                                <span>Pública</span>
+                              </span>
+                            )}
+
                             <button
                               type="button"
                               onClick={() => startRenaming(game.id, game.name)}
@@ -302,6 +437,7 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
                             >
                               <Pencil className="w-3.5 h-3.5" />
                             </button>
+
                             {isActive && (
                               <span className="px-2 py-0.5 rounded-full bg-ios-blue/15 text-ios-blue text-[10px] font-bold tracking-wider uppercase border border-ios-blue/30">
                                 Activa
@@ -383,15 +519,24 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
                     <div className="mt-3 pt-2.5 border-t border-black/5 dark:border-white/5 flex gap-2">
                       <button
                         type="button"
-                        onClick={() => switchGame(game.id)}
+                        onClick={() => handleEnterGame(game)}
                         className={`w-full py-2.5 px-3 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 ios-active transition-all ${
                           isActive
                             ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 border border-black/5 dark:border-white/5'
                             : 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 shadow-md'
                         }`}
                       >
-                        <span>{isActive ? 'Continuar Partida Actual' : 'Entrar a esta Partida'}</span>
-                        <ChevronRight className="w-3.5 h-3.5" />
+                        {unlocked ? (
+                          <>
+                            <span>{isActive ? 'Continuar Partida Actual' : 'Entrar a esta Partida'}</span>
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </>
+                        ) : (
+                          <>
+                            <KeyRound className="w-3.5 h-3.5 text-amber-500" />
+                            <span>Desbloquear con PIN</span>
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>
@@ -421,6 +566,81 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
           )}
         </div>
       </div>
+
+      {/* PIN Unlock Modal for Locked Game */}
+      {pinModalGame && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="bg-white dark:bg-ios-card-dark rounded-3xl p-5 border border-black/10 dark:border-white/10 shadow-2xl max-w-sm w-full space-y-4 animate-scaleUp">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-500 flex items-center justify-center">
+                  <KeyRound className="w-4 h-4" />
+                </div>
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-50">
+                  Desbloquear Partida
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setPinModalGame(null);
+                  setPinInput('');
+                  setPinError(null);
+                }}
+                className="text-zinc-400 hover:text-zinc-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              Introduce el PIN de <strong>"{pinModalGame.name}"</strong> para entrar y operar en este dispositivo:
+            </p>
+
+            <form onSubmit={handleUnlockAndEnter} className="space-y-3">
+              <input
+                type="password"
+                autoFocus
+                value={pinInput}
+                onChange={(e) => {
+                  setPinInput(e.target.value);
+                  setPinError(null);
+                }}
+                placeholder="Escribe el PIN..."
+                className="w-full px-3.5 py-2.5 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-center font-mono text-base tracking-widest text-zinc-900 dark:text-zinc-50 border border-black/5 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-amber-500"
+              />
+
+              {pinError && (
+                <div className="p-2 bg-red-500/10 text-ios-red text-xs rounded-xl flex items-center gap-1.5 font-medium">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{pinError}</span>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="submit"
+                  disabled={!pinInput.trim()}
+                  className="flex-1 py-3 rounded-2xl bg-amber-500 text-white font-bold text-xs shadow-md ios-active disabled:opacity-50"
+                >
+                  Desbloquear y Entrar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPinModalGame(null);
+                    setPinInput('');
+                    setPinError(null);
+                  }}
+                  className="px-4 py-3 rounded-2xl bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-semibold ios-active"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

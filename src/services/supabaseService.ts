@@ -58,6 +58,35 @@ export const isCloudConnected = (): boolean => {
   return true; // Always connected to Supabase
 };
 
+export function extractPrivacyAndPin(watchlist: string[] | undefined): { isPrivate: boolean; pinCode?: string; cleanWatchlist: string[] } {
+  const list = watchlist || [];
+  const secTag = list.find((s) => typeof s === 'string' && s.startsWith('__SEC:'));
+  if (!secTag) {
+    return { isPrivate: true, pinCode: undefined, cleanWatchlist: list.filter((s) => typeof s === 'string' && !s.startsWith('__SEC:')) };
+  }
+  const isPrivate = !secTag.includes('PUB');
+  let pinCode: string | undefined = undefined;
+  if (isPrivate && secTag.includes('PRIV:')) {
+    const parts = secTag.split(':');
+    if (parts.length >= 3) {
+      pinCode = parts[2].replace(/__$/, '');
+    }
+  }
+  return {
+    isPrivate,
+    pinCode,
+    cleanWatchlist: list.filter((s) => typeof s === 'string' && !s.startsWith('__SEC:')),
+  };
+}
+
+export function encodePrivacyTag(isPrivate: boolean, pinCode?: string): string {
+  if (isPrivate) {
+    const cleanPin = (pinCode || '').trim();
+    return cleanPin ? `__SEC:PRIV:${cleanPin}__` : `__SEC:PRIV__`;
+  }
+  return `__SEC:PUB__`;
+}
+
 // Fetch all games from Supabase
 export async function fetchGamesFromSupabase(): Promise<GameSummary[] | null> {
   const supabase = getSupabase();
@@ -65,7 +94,7 @@ export async function fetchGamesFromSupabase(): Promise<GameSummary[] | null> {
   try {
     const { data, error } = await supabase
       .from('games')
-      .select('id, name, initial_cash, cash_available, cash_invested, total_net_worth, total_pnl, total_pnl_percent, positions_count, created_at, updated_at')
+      .select('id, name, initial_cash, cash_available, cash_invested, total_net_worth, total_pnl, total_pnl_percent, positions_count, watchlist, created_at, updated_at')
       .order('updated_at', { ascending: false });
 
     if (error || !data) {
@@ -73,19 +102,24 @@ export async function fetchGamesFromSupabase(): Promise<GameSummary[] | null> {
       return null;
     }
 
-    return data.map((g: any) => ({
-      id: g.id,
-      name: g.name,
-      createdAt: Number(g.created_at),
-      updatedAt: Number(g.updated_at),
-      initialCash: Number(g.initial_cash),
-      cashAvailable: Number(g.cash_available),
-      cashInvested: Number(g.cash_invested),
-      totalNetWorth: Number(g.total_net_worth),
-      totalPnL: Number(g.total_pnl),
-      totalPnLPercent: Number(g.total_pnl_percent),
-      positionsCount: Number(g.positions_count || 0),
-    }));
+    return data.map((g: any) => {
+      const { isPrivate, pinCode } = extractPrivacyAndPin(g.watchlist);
+      return {
+        id: g.id,
+        name: g.name,
+        createdAt: Number(g.created_at),
+        updatedAt: Number(g.updated_at),
+        initialCash: Number(g.initial_cash),
+        cashAvailable: Number(g.cash_available),
+        cashInvested: Number(g.cash_invested),
+        totalNetWorth: Number(g.total_net_worth),
+        totalPnL: Number(g.total_pnl),
+        totalPnLPercent: Number(g.total_pnl_percent),
+        positionsCount: Number(g.positions_count || 0),
+        isPrivate,
+        pinCode,
+      };
+    });
   } catch (err) {
     console.warn('Supabase exception:', err);
     return null;
@@ -105,6 +139,8 @@ export async function fetchGameDataFromSupabase(gameId: string): Promise<GameSav
 
     if (error || !data) return null;
 
+    const { isPrivate, pinCode, cleanWatchlist } = extractPrivacyAndPin(data.watchlist);
+
     return {
       id: data.id,
       name: data.name,
@@ -119,7 +155,9 @@ export async function fetchGameDataFromSupabase(gameId: string): Promise<GameSav
       positionsCount: Number(data.positions_count || 0),
       positions: data.positions || [],
       tradeHistory: data.trade_history || [],
-      watchlist: data.watchlist || [],
+      watchlist: cleanWatchlist,
+      isPrivate,
+      pinCode,
     };
   } catch {
     return null;
@@ -131,6 +169,10 @@ export async function saveGameToSupabase(game: GameSaveData): Promise<boolean> {
   const supabase = getSupabase();
 
   try {
+    const tag = encodePrivacyTag(game.isPrivate ?? true, game.pinCode);
+    const cleanWatchlist = (game.watchlist || []).filter((s) => typeof s === 'string' && !s.startsWith('__SEC:'));
+    const finalWatchlist = [tag, ...cleanWatchlist];
+
     const payload = {
       id: game.id,
       name: game.name,
@@ -143,7 +185,7 @@ export async function saveGameToSupabase(game: GameSaveData): Promise<boolean> {
       positions_count: game.positions ? game.positions.length : 0,
       positions: game.positions || [],
       trade_history: game.tradeHistory || [],
-      watchlist: game.watchlist || [],
+      watchlist: finalWatchlist,
       created_at: game.createdAt || Date.now(),
       updated_at: Date.now(),
     };

@@ -1,7 +1,19 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Position, TradeRecord, PositionType, StockQuote, GameSummary, GameSaveData } from '../types/market';
 import { fetchStockData, fetchBatchQuotes, POPULAR_SYMBOLS } from '../services/marketApi';
-import { fetchAllGames, syncGameToCloudAndLocal, loadGameData, deleteGameById, renameGameById, generateGameId, getSavedGameSync, getAllGamesSync } from '../services/gamesHubApi';
+import {
+  fetchAllGames,
+  syncGameToCloudAndLocal,
+  loadGameData,
+  deleteGameById,
+  renameGameById,
+  generateGameId,
+  getSavedGameSync,
+  getAllGamesSync,
+  markGameUnlockedLocally,
+  isGameUnlocked,
+  unlockGame,
+} from '../services/gamesHubApi';
 import { subscribeToSupabaseRealtime } from '../services/supabaseService';
 
 interface TradingContextType {
@@ -12,13 +24,17 @@ interface TradingContextType {
   // Games Hub / Multi-save
   activeGameId: string | null;
   activeGameName: string;
+  isCurrentGamePrivate: boolean;
+  isCurrentGameUnlocked: boolean;
+  currentGamePin?: string;
+  unlockCurrentGame: (enteredPin: string) => boolean;
   gamesList: GameSummary[];
   isLobbyOpen: boolean;
   isLoadingGames: boolean;
   openLobby: () => void;
   closeLobby: () => void;
   fetchGamesList: () => Promise<GameSummary[]>;
-  createGame: (name: string, startingCapital: number) => Promise<void>;
+  createGame: (name: string, isPrivate?: boolean, pinCode?: string) => Promise<void>;
   renameGame: (gameId: string, newName: string) => Promise<void>;
   switchGame: (gameId: string) => Promise<void>;
   deleteGame: (gameId: string) => Promise<void>;
@@ -72,7 +88,7 @@ const STORAGE_KEYS = {
   THEME: 'apex_theme_v8',
 };
 
-const DEFAULT_INITIAL_BALANCE = 100000;
+const DEFAULT_INITIAL_BALANCE = 10000;
 const DEFAULT_WATCHLIST: string[] = [];
 
 export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -151,6 +167,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Active Game In-Memory State (Initialized directly with saved game)
   const [createdAt, setCreatedAt] = useState<number>(() => initialGameData?.createdAt || Date.now());
+  const [isCurrentGamePrivate, setIsCurrentGamePrivate] = useState<boolean>(() => initialGameData?.isPrivate ?? true);
+  const [currentGamePin, setCurrentGamePin] = useState<string | undefined>(() => initialGameData?.pinCode);
+  const [unlockedStateNonce, setUnlockedStateNonce] = useState<number>(0);
   const [initialCash, setInitialCash] = useState<number>(() => initialGameData?.initialCash ?? DEFAULT_INITIAL_BALANCE);
   const [cashAvailable, setCashAvailable] = useState<number>(() => initialGameData?.cashAvailable ?? DEFAULT_INITIAL_BALANCE);
   const [positions, setPositions] = useState<Position[]>(() => initialGameData?.positions || []);
@@ -159,6 +178,22 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const [liveQuotes, setLiveQuotes] = useState<Record<string, StockQuote>>({});
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
+
+  const isCurrentGameUnlocked = useMemo(() => {
+    if (!activeGameId) return true;
+    if (!isCurrentGamePrivate) return true;
+    return isGameUnlocked({ id: activeGameId, isPrivate: isCurrentGamePrivate, pinCode: currentGamePin });
+  }, [activeGameId, isCurrentGamePrivate, currentGamePin, unlockedStateNonce]);
+
+  const unlockCurrentGame = useCallback((enteredPin: string): boolean => {
+    if (!activeGameId) return true;
+    const ok = unlockGame({ id: activeGameId, isPrivate: isCurrentGamePrivate, pinCode: currentGamePin }, enteredPin);
+    if (ok) {
+      setUnlockedStateNonce((v) => v + 1);
+      return true;
+    }
+    return false;
+  }, [activeGameId, isCurrentGamePrivate, currentGamePin]);
 
   const hasInitialized = useRef(false);
   const isHydrated = useRef(false);
@@ -187,6 +222,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (data) {
       setActiveGameId(data.id);
       setActiveGameName(data.name);
+      setIsCurrentGamePrivate(data.isPrivate ?? true);
+      setCurrentGamePin(data.pinCode);
       setCreatedAt(data.createdAt || Date.now());
       setInitialCash(data.initialCash);
       setCashAvailable(data.cashAvailable);
@@ -199,10 +236,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
 
   // Create a new game
-  const createGame = useCallback(async (name: string, startingCapital: number) => {
+  const createGame = useCallback(async (name: string, isPrivate: boolean = true, pinCode?: string) => {
     const id = generateGameId();
     const cleanName = name.trim() || `Partida ${id}`;
-    const capital = Number(startingCapital) || DEFAULT_INITIAL_BALANCE;
+    const capital = DEFAULT_INITIAL_BALANCE;
+    const cleanPin = (pinCode || '').trim();
 
     const newGame: GameSaveData = {
       id,
@@ -219,7 +257,13 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       positions: [],
       tradeHistory: [],
       watchlist: DEFAULT_WATCHLIST,
+      isPrivate,
+      pinCode: isPrivate ? cleanPin : undefined,
     };
+
+    // Automatically mark unlocked in creator device
+    markGameUnlockedLocally(id);
+    setUnlockedStateNonce((v) => v + 1);
 
     await syncGameToCloudAndLocal(newGame);
     await fetchGamesList();
@@ -296,6 +340,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (latestData) {
           isReceivingRemoteUpdateRef.current = true;
           setActiveGameName(latestData.name);
+          setIsCurrentGamePrivate(latestData.isPrivate ?? true);
+          setCurrentGamePin(latestData.pinCode);
           setCreatedAt(latestData.createdAt || Date.now());
           setInitialCash(latestData.initialCash);
           setCashAvailable(latestData.cashAvailable);
@@ -493,6 +539,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       positions,
       tradeHistory,
       watchlist,
+      isPrivate: isCurrentGamePrivate,
+      pinCode: currentGamePin,
     };
 
     if (syncDebounceTimerRef.current) {
@@ -508,7 +556,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         clearTimeout(syncDebounceTimerRef.current);
       }
     };
-  }, [activeGameId, activeGameName, createdAt, initialCash, cashAvailable, cashInvested, totalNetWorth, totalPnL, totalPnLPercent, positions, tradeHistory, watchlist, gamesList]);
+  }, [activeGameId, activeGameName, createdAt, isCurrentGamePrivate, currentGamePin, initialCash, cashAvailable, cashInvested, totalNetWorth, totalPnL, totalPnLPercent, positions, tradeHistory, watchlist, gamesList]);
 
   // Trade Execution: Open Position
   const openPosition = (
@@ -518,13 +566,17 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     type: PositionType,
     executionPrice?: number
   ): { success: boolean; message: string } => {
+    if (isCurrentGamePrivate && !isCurrentGameUnlocked) {
+      return { success: false, message: 'Esta partida es privada. Desbloquéala con su PIN para operar.' };
+    }
+
     const cleanAmount = Number(amountToInvest);
     if (isNaN(cleanAmount) || cleanAmount <= 0) {
       return { success: false, message: 'Ingresa un monto válido para apostar.' };
     }
 
     if (cleanAmount > cashAvailable) {
-      return { success: false, message: `Fondos insuficientes. Tienes disponible $${cashAvailable.toLocaleString('en-US', { minimumFractionDigits: 2 })}` };
+      return { success: false, message: `Fondos insuficientes. Tienes disponible ${cashAvailable.toLocaleString('es-ES', { minimumFractionDigits: 2 })} €` };
     }
 
     const currentQuote = liveQuotes[symbol];
@@ -566,7 +618,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     return {
       success: true,
-      message: `Posición ${type === 'LONG' ? 'en Largo (A favor)' : 'en Corto (A la baja)'} abierta con $${cleanAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}.`
+      message: `Posición ${type === 'LONG' ? 'en Largo (A favor)' : 'en Corto (A la baja)'} abierta con ${cleanAmount.toLocaleString('es-ES', { minimumFractionDigits: 2 })} €.`
     };
   };
 
@@ -575,6 +627,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     positionId: string,
     percentageToClose: number = 100
   ): { success: boolean; message: string } => {
+    if (isCurrentGamePrivate && !isCurrentGameUnlocked) {
+      return { success: false, message: 'Esta partida es privada. Desbloquéala con su PIN para operar.' };
+    }
+
     const targetPos = positions.find((p) => p.id === positionId);
     if (!targetPos) {
       return { success: false, message: 'Posición no encontrada.' };
@@ -628,7 +684,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     return {
       success: true,
-      message: `Posición cerrada. ${realizedPnL >= 0 ? 'Ganancia' : 'Pérdida'}: ${realizedPnL >= 0 ? '+' : ''}$${realizedPnL.toFixed(2)} (${realizedPnLPercent.toFixed(2)}%)`
+      message: `Posición cerrada. ${realizedPnL >= 0 ? 'Ganancia' : 'Pérdida'}: ${realizedPnL >= 0 ? '+' : ''}${realizedPnL.toFixed(2)} € (${realizedPnLPercent.toFixed(2)}%)`
     };
   };
 
@@ -643,6 +699,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const resetAccount = (newBalance: number = DEFAULT_INITIAL_BALANCE) => {
+    if (isCurrentGamePrivate && !isCurrentGameUnlocked) return;
     setInitialCash(newBalance);
     setCashAvailable(newBalance);
     setPositions([]);
@@ -656,6 +713,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         toggleDarkMode,
         activeGameId,
         activeGameName,
+        isCurrentGamePrivate,
+        isCurrentGameUnlocked,
+        currentGamePin,
+        unlockCurrentGame,
         gamesList,
         isLobbyOpen,
         isLoadingGames,

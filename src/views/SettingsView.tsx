@@ -15,14 +15,11 @@ export const SettingsView: React.FC = () => {
     gamesList,
   } = useTrading();
 
-  const [selectedCapital, setSelectedCapital] = useState<number>(initialCash);
   const [isResetConfirming, setIsResetConfirming] = useState<boolean>(false);
   const [resetSuccess, setResetSuccess] = useState<boolean>(false);
 
-  const capitalOptions = [10000, 50000, 100000, 500000, 1000000];
-
   const handleReset = () => {
-    resetAccount(selectedCapital);
+    resetAccount(10000);
     setIsResetConfirming(false);
     setResetSuccess(true);
     setTimeout(() => setResetSuccess(false), 2000);
@@ -113,34 +110,17 @@ export const SettingsView: React.FC = () => {
       {/* Virtual Capital Reset */}
       <div className="bg-white dark:bg-ios-card-dark rounded-3xl p-5 border border-black/5 dark:border-white/5 shadow-ios-sm">
         <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-3">
-          Capital Virtual de Inicio
+          Reiniciar Partida
         </h2>
 
-        <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-3">
-          Elige con cuánto dinero ficticio deseas empezar o reiniciar tu cuenta:
+        <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4">
+          Si tus operaciones no han salido bien, puedes reiniciar tu cuenta en cualquier momento para volver a empezar con los <strong>10.000 €</strong> iniciales.
         </p>
 
-        <div className="grid grid-cols-3 gap-2 mb-4">
-          {capitalOptions.map((amount) => (
-            <button
-              key={amount}
-              type="button"
-              onClick={() => setSelectedCapital(amount)}
-              className={`py-2 px-2 rounded-xl text-xs font-mono font-bold border transition-all ios-active ${
-                selectedCapital === amount
-                  ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 border-transparent shadow-sm'
-                  : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border-black/5 dark:border-white/5'
-              }`}
-            >
-              {formatCurrency(amount, 'USD', true)}
-            </button>
-          ))}
-        </div>
-
         {isResetConfirming ? (
-          <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-2xl space-y-2">
+          <div className="p-3.5 bg-red-500/10 border border-red-500/30 rounded-2xl space-y-2.5">
             <span className="text-xs font-medium text-ios-red block">
-              ¿Seguro? Se borrarán todas las posiciones y el historial para reiniciar con {formatCurrency(selectedCapital)}.
+              ¿Seguro? Se borrarán todas las posiciones y el historial para reiniciar con {formatCurrency(10000)}.
             </span>
             <div className="flex gap-2">
               <button
@@ -166,13 +146,13 @@ export const SettingsView: React.FC = () => {
             className="w-full py-3 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 text-xs font-bold flex items-center justify-center gap-2 ios-active hover:bg-zinc-200 dark:hover:bg-zinc-700"
           >
             <RotateCcw className="w-4 h-4" />
-            Reiniciar Cartera con {formatCurrency(selectedCapital)}
+            Reiniciar Cartera con {formatCurrency(10000)}
           </button>
         )}
 
         {resetSuccess && (
           <div className="mt-2 p-2 bg-ios-green/15 text-ios-green text-xs font-semibold rounded-xl text-center">
-            Cartera reiniciada con éxito.
+            Cartera reiniciada con 10.000 € con éxito.
           </div>
         )}
       </div>
