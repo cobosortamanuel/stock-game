@@ -123,7 +123,7 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
           </button>
         </div>
       ) : (
-        <div className="bg-white dark:bg-ios-card-dark rounded-3xl p-4 border border-black/5 dark:border-white/5 shadow-ios">
+        <div className="bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-900 dark:to-zinc-950 rounded-3xl p-4 border border-black/5 dark:border-white/10 shadow-ios">
           {isLoading && chartData.length === 0 ? (
             <div className="h-[280px] flex flex-col items-center justify-center text-zinc-400 gap-2">
               <Loader2 className="w-7 h-7 animate-spin text-ios-blue" />
@@ -161,7 +161,7 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
             return (
               <div
                 key={pos.id}
-                className="p-4 bg-white dark:bg-ios-card-dark rounded-3xl border border-black/5 dark:border-white/5 shadow-ios-sm space-y-3"
+                className="p-4 bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-900 dark:to-zinc-950 rounded-3xl border border-black/5 dark:border-white/10 shadow-ios-sm space-y-3"
               >
                 {/* Header: Type Badge, Opened Time, PnL */}
                 <div className="flex items-start justify-between">
@@ -255,7 +255,7 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
 
       {/* Financial Key Statistics Grid */}
       {quote && (
-        <div className="mt-4 bg-white dark:bg-ios-card-dark rounded-3xl p-5 border border-black/5 dark:border-white/5 shadow-ios-sm">
+        <div className="mt-4 bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-900 dark:to-zinc-950 rounded-3xl p-5 border border-black/5 dark:border-white/10 shadow-ios-sm">
           <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-3">
             Estadísticas Clave del Mercado
           </h3>

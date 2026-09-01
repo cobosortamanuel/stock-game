@@ -60,7 +60,7 @@ export const PositionCard: React.FC<PositionCardProps> = ({
   const isTfProfitable = currentTfPnL.amount >= 0;
 
   return (
-    <div className="bg-white dark:bg-ios-card-dark rounded-2xl p-4 border border-black/5 dark:border-white/5 shadow-ios-sm transition-all duration-200">
+    <div className="bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-900 dark:to-zinc-950 rounded-3xl p-4 border border-black/5 dark:border-white/10 shadow-ios-sm transition-all duration-200">
       {/* Top row: Symbol, Name, Badges */}
       <div className="flex items-start justify-between">
         <button

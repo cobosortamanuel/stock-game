@@ -56,7 +56,7 @@ export const TradeModal: React.FC<TradeModalProps> = ({
       <div className="absolute inset-0" onClick={onClose} />
 
       {/* Bottom Sheet Card */}
-      <div className="relative z-10 w-full max-w-lg bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 shadow-ios-sheet border-t sm:border border-black/10 dark:border-white/10 max-h-[92vh] overflow-y-auto pb-safe">
+      <div className="w-full max-w-md bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-900 dark:to-zinc-950 rounded-t-3xl sm:rounded-3xl p-5 border border-black/10 dark:border-white/10 shadow-ios-sheet animate-slideUp sm:animate-scaleUp max-h-[90vh] overflow-y-auto">
         {/* iOS Handle Indicator */}
         <div className="w-12 h-1.5 rounded-full bg-zinc-300 dark:bg-zinc-700 mx-auto mb-4 sm:hidden" />
 

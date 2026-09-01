@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Moon, Sun, RefreshCw } from 'lucide-react';
+import { Search, Moon, Sun, RefreshCw, TrendingUp } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 
 interface HeaderProps {
@@ -26,8 +26,8 @@ export const Header: React.FC<HeaderProps> = ({
             className="flex items-center gap-2 text-left group ios-active"
             title="Cambiar o crear partida"
           >
-            <div className="w-8 h-8 rounded-xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 flex items-center justify-center font-bold text-sm tracking-wider shadow-sm group-hover:scale-105 transition-transform">
-              AT
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-ios-green text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
+              <TrendingUp className="w-4 h-4 stroke-[2.5]" />
             </div>
             <div>
               <span className="text-sm font-bold text-zinc-900 dark:text-zinc-50 leading-tight block truncate max-w-[150px] sm:max-w-[200px]">
