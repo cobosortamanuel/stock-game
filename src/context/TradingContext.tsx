@@ -13,6 +13,7 @@ import {
   markGameUnlockedLocally,
   isGameUnlocked,
   unlockGame,
+  updateGamePinById,
 } from '../services/gamesHubApi';
 import { subscribeToSupabaseRealtime } from '../services/supabaseService';
 
@@ -28,6 +29,7 @@ interface TradingContextType {
   isCurrentGameUnlocked: boolean;
   currentGamePin?: string;
   unlockCurrentGame: (enteredPin: string) => boolean;
+  updatePin: (newPin: string) => Promise<boolean>;
   gamesList: GameSummary[];
   isLobbyOpen: boolean;
   isLoadingGames: boolean;
@@ -277,6 +279,19 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setActiveGameName(newName.trim());
     }
     await fetchGamesList();
+  }, [activeGameId, fetchGamesList]);
+
+  // Update active game PIN
+  const updatePin = useCallback(async (newPin: string): Promise<boolean> => {
+    if (!activeGameId) return false;
+    const cleanPin = newPin.trim();
+    setCurrentGamePin(cleanPin);
+    setIsCurrentGamePrivate(true);
+    markGameUnlockedLocally(activeGameId);
+    setUnlockedStateNonce((v) => v + 1);
+    await updateGamePinById(activeGameId, cleanPin, true);
+    await fetchGamesList();
+    return true;
   }, [activeGameId, fetchGamesList]);
 
   // Delete a game
@@ -728,6 +743,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         fetchGamesList,
         createGame,
         renameGame,
+        updatePin,
         switchGame,
         deleteGame,
         isInstallable,

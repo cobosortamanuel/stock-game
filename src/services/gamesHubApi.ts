@@ -166,7 +166,7 @@ export async function renameGameById(gameId: string, newName: string): Promise<b
   if (existing) {
     existing.name = cleanName;
     existing.updatedAt = Date.now();
-    syncGameToCloudAndLocal(existing);
+    await syncGameToCloudAndLocal(existing);
     return true;
   }
 
@@ -179,6 +179,23 @@ export async function renameGameById(gameId: string, newName: string): Promise<b
   } catch {}
 
   return true;
+}
+
+// Update a game PIN with immediate local & cloud update
+export async function updateGamePinById(gameId: string, newPin: string, isPrivate: boolean = true): Promise<boolean> {
+  const cleanId = gameId.trim().toUpperCase();
+  const cleanPin = newPin.trim();
+
+  const existing = await loadGameData(cleanId);
+  if (existing) {
+    existing.pinCode = cleanPin;
+    existing.isPrivate = isPrivate;
+    existing.updatedAt = Date.now();
+    await syncGameToCloudAndLocal(existing);
+    return true;
+  }
+
+  return false;
 }
 
 // Load a specific game's full data (Cloud source of truth when connected)
