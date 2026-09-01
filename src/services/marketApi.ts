@@ -11,7 +11,7 @@ export const POPULAR_SYMBOLS = [
   { symbol: 'META', name: 'Meta Platforms, Inc.', sector: 'Redes Sociales', basePrice: 512.90 },
   { symbol: 'AMD', name: 'Advanced Micro Devices', sector: 'Semiconductores', basePrice: 146.70 },
   { symbol: 'PLTR', name: 'Palantir Technologies', sector: 'Inteligencia Artificial', basePrice: 31.40 },
-  { symbol: 'BTC-USD', name: 'Bitcoin (USD)', sector: 'Criptomonedas', basePrice: 63850.00 },
+  { symbol: 'BTC-USD', name: 'Bitcoin (USD)', sector: 'Criptomonedas', basePrice: 78626.00 },
   { symbol: 'ETH-USD', name: 'Ethereum (USD)', sector: 'Criptomonedas', basePrice: 2540.00 },
   { symbol: 'NFLX', name: 'Netflix, Inc.', sector: 'Streaming / Entretenimiento', basePrice: 685.20 },
   { symbol: 'COIN', name: 'Coinbase Global, Inc.', sector: 'Criptomonedas Exchange', basePrice: 218.60 },
@@ -53,12 +53,13 @@ export const formatPercent = (value: number, includeSign: boolean = true): strin
   return `${sign}${value.toFixed(2)}%`;
 };
 
-function getTimeRangeParams(range: TimeRange): { range: string; interval: string } {
+function getTimeRangeParams(range: TimeRange, symbol: string): { range: string; interval: string } {
+  const isCrypto = symbol.includes('BTC') || symbol.includes('ETH') || symbol.includes('USD');
   switch (range) {
     case '1H':
       return { range: '1d', interval: '2m' };
     case '1D':
-      return { range: '1d', interval: '5m' };
+      return { range: isCrypto ? '2d' : '1d', interval: '5m' };
     case '1W':
       return { range: '5d', interval: '15m' };
     case '1M':
@@ -70,7 +71,7 @@ function getTimeRangeParams(range: TimeRange): { range: string; interval: string
     case 'ALL':
       return { range: 'max', interval: '1mo' };
     default:
-      return { range: '1d', interval: '5m' };
+      return { range: isCrypto ? '2d' : '1d', interval: '5m' };
   }
 }
 
@@ -80,7 +81,8 @@ export async function fetchStockData(
   range: TimeRange = '1D'
 ): Promise<{ quote: StockQuote; chart: ChartPoint[] } | null> {
   const cleanSymbol = symbol.trim().toUpperCase();
-  const { range: apiRange, interval } = getTimeRangeParams(range);
+  const isCrypto = cleanSymbol.includes('BTC') || cleanSymbol.includes('ETH') || cleanSymbol.includes('USD');
+  const { range: apiRange, interval } = getTimeRangeParams(range, cleanSymbol);
 
   const supabaseFunctionUrl = `${SUPABASE_PROJECT_URL}/functions/v1/market?symbol=${encodeURIComponent(cleanSymbol)}&range=${apiRange}&interval=${interval}`;
   const targetYahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanSymbol}?range=${apiRange}&interval=${interval}`;
@@ -159,6 +161,9 @@ export async function fetchStockData(
 
           if (range === '1H' && chartPoints.length > 30) {
             chartPoints = chartPoints.slice(-30);
+          } else if (range === '1D' && isCrypto && chartPoints.length > 288) {
+            // Keep a complete continuous 24h rolling day window for crypto (288 5m candles = 24h)
+            chartPoints = chartPoints.slice(-288);
           }
 
           const quote: StockQuote = {
