@@ -52,11 +52,14 @@ export const MarketsView: React.FC<MarketsViewProps> = ({
     watchlist.forEach((sym) => {
       if (!existing.has(sym)) {
         const quote = liveQuotes[sym];
+        const isCrypto = sym.includes('-') || sym.includes('USD') || sym.includes('BTC') || sym.includes('ETH');
+        const isSpain = sym.endsWith('.MC');
+
         list.unshift({
           symbol: sym,
-          name: quote?.name || `${sym} Asset`,
-          sector: sym.includes('-') ? 'Criptomoneda' : 'Favorito',
-          category: sym.includes('-') ? 'CRYPTO' : 'OTHER',
+          name: quote?.name || `${sym}`,
+          sector: isCrypto ? 'Criptomoneda' : isSpain ? 'Bolsa España' : 'Acción Global',
+          category: isCrypto ? 'CRYPTO' : isSpain ? 'SPAIN' : 'TECH',
           basePrice: quote?.price || 100,
         });
         existing.add(sym);
@@ -107,7 +110,7 @@ export const MarketsView: React.FC<MarketsViewProps> = ({
     const isFavA = watchlist.includes(a.symbol);
     const isFavB = watchlist.includes(b.symbol);
 
-    // Favoritos primero
+    // Favoritos siempre arriba
     if (isFavA && !isFavB) return -1;
     if (!isFavA && isFavB) return 1;
 
