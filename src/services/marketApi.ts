@@ -247,37 +247,10 @@ export async function searchSymbols(query: string): Promise<SearchResult[]> {
       type: 'EQUITY'
     }));
 
-  const uppercaseQuery = cleanQ.toUpperCase();
+  const resultMap = new Map<string, SearchResult>();
+  matchedPopular.forEach(item => resultMap.set(item.symbol, item));
 
-  // If user searched a ticker or potential crypto symbol, include exact candidates
-  if (/^[A-Z0-9.\-]{1,15}$/.test(uppercaseQuery)) {
-    const hasMatch = matchedPopular.some(m => m.symbol === uppercaseQuery || m.symbol === `${uppercaseQuery}-USD`);
-    if (!hasMatch) {
-      if (uppercaseQuery.includes('-')) {
-        matchedPopular.unshift({
-          symbol: uppercaseQuery,
-          name: `${uppercaseQuery} (Crypto)`,
-          exchange: 'CRYPTO',
-          type: 'CRYPTOCURRENCY'
-        });
-      } else {
-        matchedPopular.unshift({
-          symbol: `${uppercaseQuery}-USD`,
-          name: `${uppercaseQuery} (Crypto / USD)`,
-          exchange: 'CRYPTO',
-          type: 'CRYPTOCURRENCY'
-        });
-        matchedPopular.unshift({
-          symbol: uppercaseQuery,
-          name: `${uppercaseQuery} (Acción)`,
-          exchange: uppercaseQuery.endsWith('.MC') ? 'BME' : 'NASDAQ',
-          type: 'EQUITY'
-        });
-      }
-    }
-  }
-
-  // Remote Supabase Edge Function search
+  // 1. Remote Supabase Edge Function search (Queries official Yahoo Search)
   try {
     const supabaseSearchUrl = `${SUPABASE_PROJECT_URL}/functions/v1/market?q=${encodeURIComponent(cleanQ)}`;
     const res = await fetch(supabaseSearchUrl, {
@@ -285,7 +258,7 @@ export async function searchSymbols(query: string): Promise<SearchResult[]> {
         'apikey': SUPABASE_ANON_KEY,
         'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
       },
-      signal: AbortSignal.timeout(3000),
+      signal: AbortSignal.timeout(3500),
     });
 
     if (res.ok) {
@@ -300,16 +273,28 @@ export async function searchSymbols(query: string): Promise<SearchResult[]> {
             type: q.quoteType || 'EQUITY'
           }));
 
-        const map = new Map<string, SearchResult>();
-        [...matchedPopular, ...remoteResults].forEach(item => {
-          if (!map.has(item.symbol)) {
-            map.set(item.symbol, item);
+        remoteResults.forEach((item: any) => {
+          if (!resultMap.has(item.symbol)) {
+            resultMap.set(item.symbol, item);
           }
         });
-        return Array.from(map.values());
+        return Array.from(resultMap.values());
       }
     }
   } catch {}
 
-  return matchedPopular;
+  // 2. Direct exact ticker fallback (only if user typed an exact symbol with dot/hyphen or standard 1-5 letters)
+  const uppercaseQuery = cleanQ.toUpperCase();
+  if (/^[A-Z0-9.\-]{2,10}$/.test(uppercaseQuery) && !resultMap.has(uppercaseQuery)) {
+    if (uppercaseQuery.includes('-') || uppercaseQuery.endsWith('.MC') || uppercaseQuery.endsWith('.PA') || uppercaseQuery.endsWith('.DE')) {
+      resultMap.set(uppercaseQuery, {
+        symbol: uppercaseQuery,
+        name: `${uppercaseQuery} (Mercado Oficial)`,
+        exchange: uppercaseQuery.endsWith('.MC') ? 'BME' : uppercaseQuery.includes('-') ? 'CRYPTO' : 'Global',
+        type: uppercaseQuery.includes('-') ? 'CRYPTOCURRENCY' : 'EQUITY'
+      });
+    }
+  }
+
+  return Array.from(resultMap.values());
 }
