@@ -6,7 +6,6 @@ import {
   Loader2,
   RefreshCw,
   FolderKanban,
-  Cloud,
   Lock,
   Globe,
   KeyRound,
@@ -175,26 +174,6 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
 
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto px-4 py-4 max-w-md mx-auto w-full space-y-4">
-        {/* Cloud Sync Active Status Pill */}
-        <div className="p-3.5 rounded-3xl bg-white dark:bg-ios-card-dark border border-black/5 dark:border-white/10 shadow-ios-sm flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-ios-green/15 text-ios-green">
-              <Cloud className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
-                  Nube Supabase Conectada
-                </span>
-                <span className="w-2 h-2 rounded-full bg-ios-green animate-pulse" />
-              </div>
-              <p className="text-[10px] text-zinc-400 font-medium">
-                Sincronización en vivo multidispositivo activa
-              </p>
-            </div>
-          </div>
-        </div>
-
         {/* Create Game Trigger Button */}
         <button
           type="button"
