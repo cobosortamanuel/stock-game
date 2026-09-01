@@ -330,12 +330,12 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, [watchlist, positions]);
 
-  // Periodic real market data sync (runs on mount and on clean interval)
+  // Periodic real market data sync (runs on mount and every 20 seconds)
   useEffect(() => {
     refreshMarketData();
     const interval = setInterval(() => {
       refreshMarketData();
-    }, 45000);
+    }, 20000);
 
     return () => clearInterval(interval);
   }, []);
