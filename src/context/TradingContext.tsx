@@ -202,6 +202,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const hasInitialized = useRef(false);
   const isHydrated = useRef(false);
   const isReceivingRemoteUpdateRef = useRef(false);
+  const isSwitchingGameRef = useRef(false);
+
   const activeGameIdRef = useRef(activeGameId);
 
   useEffect(() => {
@@ -222,6 +224,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Switch to a game
   const switchGame = useCallback(async (gameId: string) => {
+    if (syncDebounceTimerRef.current) {
+      clearTimeout(syncDebounceTimerRef.current);
+    }
+    isSwitchingGameRef.current = true;
+
     const data = await loadGameData(gameId);
     if (data) {
       setActiveGameId(data.id);
@@ -236,6 +243,12 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setWatchlist(sanitizeWatchlist(data.watchlist));
       localStorage.setItem(STORAGE_KEYS.ACTIVE_GAME_ID, data.id);
       setIsLobbyOpen(false);
+
+      setTimeout(() => {
+        isSwitchingGameRef.current = false;
+      }, 600);
+    } else {
+      isSwitchingGameRef.current = false;
     }
   }, []);
 
@@ -315,6 +328,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Delete a game
   const deleteGame = useCallback(async (gameId: string) => {
+    if (syncDebounceTimerRef.current) {
+      clearTimeout(syncDebounceTimerRef.current);
+    }
+    isSwitchingGameRef.current = true;
+
     const isCurrentActive = activeGameId === gameId;
     if (isCurrentActive) {
       setActiveGameId(null);
@@ -333,6 +351,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setIsLobbyOpen(true);
       }
     }
+    setTimeout(() => {
+      isSwitchingGameRef.current = false;
+    }, 500);
   }, [activeGameId, fetchGamesList, switchGame]);
 
   // App Initialization: Fetch cloud games cleanly and load current game from Supabase
@@ -552,6 +573,13 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return;
     }
     if (!activeGameId) return;
+
+    if (isSwitchingGameRef.current) {
+      if (syncDebounceTimerRef.current) {
+        clearTimeout(syncDebounceTimerRef.current);
+      }
+      return;
+    }
 
     if (isReceivingRemoteUpdateRef.current) {
       isReceivingRemoteUpdateRef.current = false;
