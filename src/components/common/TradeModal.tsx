@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { X, TrendingUp, TrendingDown, ShieldAlert, CheckCircle2 } from 'lucide-react';
 import { StockQuote, PositionType } from '../../types/market';
 import { useTrading } from '../../context/TradingContext';
-import { formatCurrency, formatPercent } from '../../services/marketApi';
+import { formatCurrency, formatPercent, getMarketStatus } from '../../services/marketApi';
+import { getFxRate } from '../../lib/portfolio';
 
 interface TradeModalProps {
   quote: StockQuote;
@@ -12,12 +13,12 @@ interface TradeModalProps {
 }
 
 export const TradeModal: React.FC<TradeModalProps> = ({
-  quote,
+  quote: initialQuote,
   isOpen,
   onClose,
   defaultType = 'LONG',
 }) => {
-  const { cashAvailable, openPosition } = useTrading();
+  const { cashAvailable, openPosition, liveQuotes, fxRates, ensureQuotes } = useTrading();
   const [positionType, setPositionType] = useState<PositionType>(defaultType);
   const [amount, setAmount] = useState<string>('1000');
   const [feedback, setFeedback] = useState<{ success: boolean; message: string } | null>(null);
@@ -27,22 +28,34 @@ export const TradeModal: React.FC<TradeModalProps> = ({
     setFeedback(null);
   }, [defaultType, isOpen]);
 
+  // Al abrir, asegurar un precio reciente (máx. 15 s)
+  useEffect(() => {
+    if (isOpen) ensureQuotes([initialQuote.symbol], 15_000);
+  }, [isOpen, initialQuote.symbol, ensureQuotes]);
+
+  // Usar la cotización más reciente disponible
+  const live = liveQuotes[initialQuote.symbol];
+  const quote = live && live.fetchedAt > (initialQuote.fetchedAt || 0) ? live : initialQuote;
+  const fx = getFxRate(quote.currency, fxRates);
+  const isForeign = quote.currency !== 'USD';
+  const isClosed = getMarketStatus(quote) === 'CLOSED';
+
   if (!isOpen) return null;
 
   const numAmount = parseFloat(amount) || 0;
-  const price = quote.price || 1;
-  const estimatedShares = numAmount > 0 ? numAmount / price : 0;
-  const isAffordable = numAmount > 0 && numAmount <= cashAvailable;
+  const price = quote.price;
+  const estimatedShares = numAmount > 0 && fx ? numAmount / (price * fx) : 0;
+  const isAffordable = numAmount > 0 && numAmount <= cashAvailable + 0.005 && !!fx;
 
   const handlePercentageSelect = (pct: number) => {
     const calculated = (cashAvailable * pct) / 100;
-    setAmount(Math.floor(calculated).toString());
+    setAmount((Math.floor(calculated * 100) / 100).toString());
   };
 
   const handleExecuteTrade = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!isAffordable) return;
-    const res = openPosition(quote.symbol, quote.name, numAmount, positionType, quote.price);
+    const res = openPosition(quote, numAmount, positionType);
     setFeedback(res);
     if (res.success) {
       setTimeout(() => {
@@ -86,10 +99,10 @@ export const TradeModal: React.FC<TradeModalProps> = ({
           <div className="flex items-center gap-3">
             <div className="text-right">
               <div className="font-mono font-bold text-base text-zinc-900 dark:text-zinc-50">
-                {formatCurrency(quote.price)}
+                {formatCurrency(quote.price, quote.currency)}
               </div>
               <div className={`text-xs font-semibold ${quote.change >= 0 ? 'text-ios-green' : 'text-ios-red'}`}>
-                {quote.change >= 0 ? '+' : ''}{formatCurrency(quote.change)} ({formatPercent(quote.changePercent)})
+                {quote.change >= 0 ? '+' : ''}{formatCurrency(quote.change, quote.currency)} ({formatPercent(quote.changePercent)})
               </div>
             </div>
             <button
@@ -116,7 +129,7 @@ export const TradeModal: React.FC<TradeModalProps> = ({
           >
             <div className="flex items-center gap-1.5 text-xs sm:text-sm">
               <TrendingUp className="w-4 h-4 shrink-0" />
-              <span className="truncate">Apostar a Favor</span>
+              <span className="truncate">Comprar</span>
             </div>
             <span className={`text-[10px] mt-0.5 ${positionType === 'LONG' ? 'text-white/80' : 'text-zinc-400'}`}>
               Ganas si sube
@@ -135,7 +148,7 @@ export const TradeModal: React.FC<TradeModalProps> = ({
           >
             <div className="flex items-center gap-1.5 text-xs sm:text-sm">
               <TrendingDown className="w-4 h-4 shrink-0" />
-              <span className="truncate">Apostar en Corto</span>
+              <span className="truncate">Vender en corto</span>
             </div>
             <span className={`text-[10px] mt-0.5 ${positionType === 'SHORT' ? 'text-white/80' : 'text-zinc-400'}`}>
               Ganas si baja
@@ -146,7 +159,7 @@ export const TradeModal: React.FC<TradeModalProps> = ({
         {/* Amount Input */}
         <div className="mt-4">
           <div className="flex items-center justify-between text-xs mb-1.5">
-            <span className="text-zinc-500 dark:text-zinc-400 font-medium">Dinero a apostar (USD):</span>
+            <span className="text-zinc-500 dark:text-zinc-400 font-medium">Importe a invertir (USD):</span>
             <span className="text-zinc-600 dark:text-zinc-300 font-mono">
               Disponible: <strong className="text-zinc-900 dark:text-zinc-100">{formatCurrency(cashAvailable)}</strong>
             </span>
@@ -184,7 +197,7 @@ export const TradeModal: React.FC<TradeModalProps> = ({
         {/* Position Summary Card */}
         <div className="mt-4 p-3.5 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl border border-black/5 dark:border-white/5 space-y-2 text-xs">
           <div className="flex items-center justify-between">
-            <span className="text-zinc-500 dark:text-zinc-400">Acciones / Títulos simulados:</span>
+            <span className="text-zinc-500 dark:text-zinc-400">Acciones (estimado):</span>
             <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
               {estimatedShares.toFixed(4)} {quote.symbol}
             </span>
@@ -193,17 +206,32 @@ export const TradeModal: React.FC<TradeModalProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-zinc-500 dark:text-zinc-400">Precio de ejecución:</span>
             <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
-              {formatCurrency(price)}
+              {formatCurrency(price, quote.currency)}
             </span>
           </div>
+
+          {isForeign && (
+            <div className="flex items-center justify-between">
+              <span className="text-zinc-500 dark:text-zinc-400">Tipo de cambio:</span>
+              <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
+                {fx ? `1 ${quote.currency} = ${fx.toFixed(4)} USD` : 'Cargando…'}
+              </span>
+            </div>
+          )}
 
           <div className="flex items-center justify-between">
             <span className="text-zinc-500 dark:text-zinc-400">Tipo de operación:</span>
             <span className={`font-semibold ${positionType === 'LONG' ? 'text-ios-green' : 'text-ios-orange'}`}>
-              {positionType === 'LONG' ? 'Compra en Largo' : 'Venta en Corto'}
+              {positionType === 'LONG' ? 'Compra (largo)' : 'Venta en corto'}
             </span>
           </div>
         </div>
+
+        {isClosed && (
+          <div className="mt-3 p-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800/80 text-[11px] text-zinc-500 dark:text-zinc-400">
+            El mercado de este valor está cerrado: la operación se hará al último precio de cierre.
+          </div>
+        )}
 
         {/* Feedback Alert */}
         {feedback && (
@@ -233,11 +261,13 @@ export const TradeModal: React.FC<TradeModalProps> = ({
                 : 'bg-ios-orange text-white hover:bg-amber-600 active:scale-[0.98]'
             }`}
           >
-            {numAmount > cashAvailable
-              ? 'Fondos Insuficientes'
+            {numAmount > cashAvailable + 0.005
+              ? 'Saldo insuficiente'
+              : !fx
+              ? 'Cargando tipo de cambio…'
               : positionType === 'LONG'
-              ? `Confirmar Apuesta a Favor ($${numAmount.toLocaleString()})`
-              : `Confirmar Apuesta en Corto ($${numAmount.toLocaleString()})`}
+              ? `Comprar por ${formatCurrency(numAmount)}`
+              : `Vender en corto por ${formatCurrency(numAmount)}`}
           </button>
         </div>
       </div>

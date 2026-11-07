@@ -1,198 +1,189 @@
-import React, { useState } from 'react';
-import { ArrowUpRight, ArrowDownRight, Layers, PlusCircle, ShieldCheck, TrendingUp } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Cloud, CloudOff, Layers, Loader2, PlusCircle, TrendingUp } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
-import { TimeRange } from '../types/market';
-import { formatCurrency, formatPercent } from '../services/marketApi';
+import { ChartPoint, TimeRange } from '../types/market';
+import { formatCurrency, formatPercent, formatTimeAgo, getMarketStatus } from '../services/marketApi';
 import { PositionCard } from '../components/common/PositionCard';
+import { StockChart } from '../components/common/StockChart';
+import { equityValueAt, PortfolioPeriod, periodStart } from '../lib/portfolio';
 
 interface PortfolioViewProps {
   onSelectSymbol: (symbol: string) => void;
   onExploreMarkets: () => void;
 }
 
-export const PortfolioView: React.FC<PortfolioViewProps> = ({
-  onSelectSymbol,
-  onExploreMarkets,
-}) => {
+const PERIODS: TimeRange[] = ['1D', '1W', '1M', '1Y', 'ALL'];
+
+function formatPointDate(ts: number, period: PortfolioPeriod): string {
+  const d = new Date(ts);
+  if (period === '1D') return d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+  if (period === '1W' || period === '1M') {
+    return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  }
+  return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: '2-digit' });
+}
+
+export const PortfolioView: React.FC<PortfolioViewProps> = ({ onSelectSymbol, onExploreMarkets }) => {
   const {
     initialCash,
     cashAvailable,
     cashInvested,
     totalNetWorth,
-    portfolioTimeframeReturns,
+    dailyPnL,
+    dailyPnLPercent,
+    equityHistory,
     positions,
     closePosition,
+    lastQuotesUpdate,
+    syncStatus,
+    liveQuotes,
   } = useTrading();
 
-  const [selectedTimeframe, setSelectedTimeframe] = useState<TimeRange>('1D');
-  const activeTimeframeReturn = portfolioTimeframeReturns[selectedTimeframe];
-  const isOverallPositive = activeTimeframeReturn.amount >= 0;
+  const [period, setPeriod] = useState<PortfolioPeriod>('ALL');
 
-  const timeRanges: TimeRange[] = ['1H', '1D', '1W', '1M', '1Y', '5Y', 'ALL'];
+  // Gráfica del patrimonio: puntos reales guardados + el valor actual
+  const chartData = useMemo<ChartPoint[]>(() => {
+    const now = Date.now();
+    const start = periodStart(period, equityHistory, now);
+    const points = [
+      { t: start, v: equityValueAt(equityHistory, start) },
+      ...equityHistory.filter((p) => p.t > start && p.t < now),
+      { t: now, v: totalNetWorth },
+    ];
+    return points.map((p) => ({ timestamp: p.t, dateStr: formatPointDate(p.t, period), price: Math.round(p.v * 100) / 100 }));
+  }, [equityHistory, period, totalNetWorth]);
 
-  const longPositions = positions.filter(p => p.type === 'LONG');
-  const shortPositions = positions.filter(p => p.type === 'SHORT');
+  const hasFewPoints = equityHistory.length < 3;
+  const longPositions = positions.filter((p) => p.type === 'LONG').length;
+  const shortPositions = positions.length - longPositions;
+  const isDayUp = dailyPnL >= 0;
+  // Si todos los mercados de tus posiciones están cerrados, el cambio es el de la última sesión
+  const anyMarketOpen = positions.some((p) => liveQuotes[p.symbol] && getMarketStatus(liveQuotes[p.symbol]) !== 'CLOSED');
 
   return (
     <div className="space-y-4 pb-20 max-w-md mx-auto px-4 pt-2">
-      {/* Portfolio Main Balance Card (Apple Wallet / Stocks Card Aesthetic) */}
+      {/* Tarjeta de patrimonio */}
       <div className="relative overflow-hidden rounded-3xl p-5 bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-900 dark:to-zinc-950 border border-black/5 dark:border-white/10 shadow-ios">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-            Patrimonio Total
-          </span>
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-[11px] font-semibold text-zinc-700 dark:text-zinc-300">
-            <ShieldCheck className="w-3.5 h-3.5 text-ios-green" />
-            <span>Ficticio 100%</span>
-          </div>
-        </div>
-
-        {/* Big Net Worth Number */}
-        <div className="mt-2 flex items-baseline gap-2">
-          <span className="text-3xl sm:text-4xl font-extrabold font-mono tracking-tight text-zinc-900 dark:text-zinc-50">
-            {formatCurrency(totalNetWorth)}
-          </span>
-        </div>
-
-        {/* Timeframe Return Badge */}
-        <div className="mt-1 flex items-center gap-2">
-          <div
-            className={`inline-flex items-center font-mono font-bold text-xs sm:text-sm ${
-              isOverallPositive ? 'text-ios-green' : 'text-ios-red'
-            }`}
-          >
-            {isOverallPositive ? (
-              <ArrowUpRight className="w-4 h-4 mr-0.5 stroke-[2.5]" />
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Patrimonio total</span>
+          <span className="flex items-center gap-1 text-[11px] font-medium text-zinc-400">
+            {syncStatus === 'saving' ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : syncStatus === 'synced' ? (
+              <Cloud className="w-3 h-3 text-ios-green" />
             ) : (
-              <ArrowDownRight className="w-4 h-4 mr-0.5 stroke-[2.5]" />
+              <CloudOff className="w-3 h-3 text-ios-orange" />
             )}
-            {isOverallPositive ? '+' : ''}{formatCurrency(activeTimeframeReturn.amount)} ({formatPercent(activeTimeframeReturn.percent)})
-          </div>
-          <span className="text-[11px] text-zinc-400 font-medium">
-            en {selectedTimeframe}
+            {lastQuotesUpdate ? `Precios ${formatTimeAgo(lastQuotesUpdate)}` : 'Cargando precios...'}
           </span>
         </div>
 
-        {/* Portfolio Timeframe Switcher */}
-        <div className="mt-4 grid grid-cols-7 gap-1 bg-zinc-200/60 dark:bg-zinc-800/80 p-1 rounded-xl">
-          {timeRanges.map((tf) => (
-            <button
-              key={tf}
-              type="button"
-              onClick={() => setSelectedTimeframe(tf)}
-              className={`py-1 text-xs font-semibold rounded-lg transition-all ios-active ${
-                selectedTimeframe === tf
-                  ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-50 shadow-sm font-bold'
-                  : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
-              }`}
-            >
-              {tf}
-            </button>
-          ))}
-        </div>
+        <StockChart
+          data={chartData}
+          timeRange={period}
+          onTimeRangeChange={(r) => setPeriod(r as PortfolioPeriod)}
+          ranges={PERIODS}
+          height={150}
+          currency="USD"
+          periodLabel={period === 'ALL' ? 'desde el inicio' : undefined}
+        />
 
-        {/* 3 Key Breakdown Metrics (Dinero Base, Dinero Apostado, Dinero para apostar) */}
-        <div className="mt-5 pt-4 border-t border-black/5 dark:border-white/10 grid grid-cols-3 gap-2">
-          {/* Dinero Base */}
-          <div className="bg-zinc-100/70 dark:bg-zinc-800/50 p-2.5 rounded-2xl">
-            <span className="text-[10px] uppercase font-semibold text-zinc-400 block tracking-tight">
-              Dinero Base
+        {hasFewPoints && (
+          <p className="mt-2 text-[10px] text-zinc-400 text-center">
+            La gráfica guarda tu patrimonio cada 15 minutos mientras la app está abierta.
+          </p>
+        )}
+
+        {positions.length > 0 && (
+          <div className="mt-3 flex items-center justify-between text-[11px] font-medium px-1">
+            <span className="text-zinc-500 dark:text-zinc-400">{anyMarketOpen ? 'Hoy en bolsa' : 'Última sesión'}</span>
+            <span className={`font-mono font-bold ${isDayUp ? 'text-ios-green' : 'text-ios-red'}`}>
+              {isDayUp ? '+' : ''}
+              {formatCurrency(dailyPnL)} ({formatPercent(dailyPnLPercent)})
             </span>
-            <span className="text-xs sm:text-sm font-bold font-mono text-zinc-800 dark:text-zinc-200 block mt-0.5">
+          </div>
+        )}
+
+        {/* Desglose */}
+        <div className="mt-4 pt-4 border-t border-black/5 dark:border-white/10 grid grid-cols-3 gap-2">
+          <div className="bg-zinc-100/70 dark:bg-zinc-800/50 p-2.5 rounded-2xl min-w-0">
+            <span className="text-[10px] uppercase font-semibold text-zinc-400 block tracking-tight">Capital inicial</span>
+            <span className="text-xs sm:text-sm font-bold font-mono text-zinc-800 dark:text-zinc-200 block mt-0.5 truncate">
               {formatCurrency(initialCash, 'USD', false, true)}
             </span>
           </div>
-
-          {/* Dinero Apostado */}
-          <div className="bg-zinc-100/70 dark:bg-zinc-800/50 p-2.5 rounded-2xl">
-            <span className="text-[10px] uppercase font-semibold text-zinc-400 block tracking-tight">
-              Apostado
-            </span>
-            <span className="text-xs sm:text-sm font-bold font-mono text-ios-orange block mt-0.5">
+          <div className="bg-zinc-100/70 dark:bg-zinc-800/50 p-2.5 rounded-2xl min-w-0">
+            <span className="text-[10px] uppercase font-semibold text-zinc-400 block tracking-tight">Invertido</span>
+            <span className="text-xs sm:text-sm font-bold font-mono text-ios-orange block mt-0.5 truncate">
               {formatCurrency(cashInvested, 'USD', false, true)}
             </span>
           </div>
-
-          {/* Dinero Disponible */}
-          <div className="bg-zinc-100/70 dark:bg-zinc-800/50 p-2.5 rounded-2xl">
-            <span className="text-[10px] uppercase font-semibold text-zinc-400 block tracking-tight">
-              Disponible
-            </span>
-            <span className="text-xs sm:text-sm font-bold font-mono text-ios-green block mt-0.5">
+          <div className="bg-zinc-100/70 dark:bg-zinc-800/50 p-2.5 rounded-2xl min-w-0">
+            <span className="text-[10px] uppercase font-semibold text-zinc-400 block tracking-tight">Disponible</span>
+            <span className="text-xs sm:text-sm font-bold font-mono text-ios-green block mt-0.5 truncate">
               {formatCurrency(cashAvailable, 'USD', false, true)}
             </span>
           </div>
         </div>
 
-        {/* Quick Position Allocation Pill */}
         {positions.length > 0 && (
           <div className="mt-3 flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400 font-medium px-1">
-            <span>Posiciones activas: <strong>{positions.length}</strong></span>
+            <span>
+              Posiciones abiertas: <strong>{positions.length}</strong>
+            </span>
             <div className="flex items-center gap-2">
-              <span className="text-ios-green font-semibold">{longPositions.length} Largo</span>
+              <span className="text-ios-green font-semibold">{longPositions} Largo</span>
               <span>•</span>
-              <span className="text-ios-orange font-semibold">{shortPositions.length} Corto</span>
+              <span className="text-ios-orange font-semibold">{shortPositions} Corto</span>
             </div>
           </div>
         )}
       </div>
 
-      {/* Open Positions Section */}
+      {/* Posiciones */}
       <div>
         <div className="flex items-center justify-between mb-3 px-1">
           <div>
-            <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-50 leading-tight">
-              Empresas con Dinero Apostado
-            </h2>
-            <p className="text-xs text-zinc-400">
-              Posiciones abiertas en tiempo real
-            </p>
+            <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-50 leading-tight">Tus posiciones</h2>
+            <p className="text-xs text-zinc-400">Valoradas con cotizaciones reales</p>
           </div>
-
           {positions.length > 0 && (
-            <button
-              type="button"
-              onClick={onExploreMarkets}
-              className="text-xs font-semibold text-ios-blue flex items-center gap-1 ios-active"
-            >
+            <button type="button" onClick={onExploreMarkets} className="text-xs font-semibold text-ios-blue flex items-center gap-1 ios-active">
               <PlusCircle className="w-3.5 h-3.5" />
-              Nueva Apuesta
+              Invertir más
             </button>
           )}
         </div>
 
-        {/* Positions List */}
         {positions.length > 0 ? (
           <div className="space-y-3">
             {positions.map((pos) => (
               <PositionCard
                 key={pos.id}
                 position={pos}
+                quote={liveQuotes[pos.symbol]}
                 onClose={(id) => closePosition(id)}
                 onSelectSymbol={onSelectSymbol}
               />
             ))}
           </div>
         ) : (
-          /* Empty State */
           <div className="rounded-3xl border border-dashed border-zinc-300 dark:border-zinc-800 p-8 text-center bg-white/50 dark:bg-zinc-900/30">
             <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mx-auto text-zinc-400 mb-3">
               <Layers className="w-6 h-6" />
             </div>
-            <h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-200">
-              Sin apuestas activas
-            </h3>
+            <h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-200">Aún no tienes posiciones</h3>
             <p className="text-xs text-zinc-400 mt-1 max-w-xs mx-auto">
-              Tienes <strong>{formatCurrency(cashAvailable)}</strong> listos para apostar a favor (en largo) o a la baja (en corto).
+              Tienes <strong>{formatCurrency(cashAvailable)}</strong> para comprar acciones (ganas si suben) o venderlas en corto
+              (ganas si bajan).
             </p>
-
             <button
               type="button"
               onClick={onExploreMarkets}
               className="mt-4 inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-bold shadow-md ios-active"
             >
               <TrendingUp className="w-4 h-4" />
-              Explorar Empresas y Apostar
+              Explorar mercados
             </button>
           </div>
         )}

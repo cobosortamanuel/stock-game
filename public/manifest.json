@@ -1,8 +1,8 @@
 {
   "id": "stock-game-app",
   "short_name": "Stock Game",
-  "name": "Stock Game - Simulador de Mercados",
-  "description": "Simulador de trading en tiempo real con datos de mercado y dinero ficticio.",
+  "name": "Stock Game",
+  "description": "Juego de inversión en bolsa con cotizaciones reales de todo el mundo.",
   "icons": [
     {
       "src": "./pwa-192x192.png",

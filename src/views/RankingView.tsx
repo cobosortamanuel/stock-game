@@ -1,117 +1,98 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import {
-  Trophy,
-  Lock,
-  Globe,
-  ChevronRight,
-  X,
-  Search,
-  RefreshCw,
-  KeyRound,
-  AlertCircle,
-  Briefcase,
-  History,
-  ShieldCheck,
-} from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Briefcase, ChevronRight, History, Loader2, Lock, LogIn, RefreshCw, Search, Trophy, X } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
-import { GameSummary, GameSaveData } from '../types/market';
-import { formatCurrency, formatPercent } from '../services/marketApi';
-import { loadGameData, isGameUnlocked, unlockGame } from '../services/gamesHubApi';
-import { subscribeToSupabaseRealtime } from '../services/supabaseService';
+import { GameSaveData, GameSummary } from '../types/market';
+import { formatCurrency, formatPercent, formatTimeAgo } from '../services/marketApi';
+import { fetchRanking, getJoinedIds } from '../services/gamesHubApi';
+import { fetchGame } from '../services/supabaseService';
+import { valuePosition } from '../lib/portfolio';
+import { JoinGameSheet } from '../components/common/JoinGameSheet';
 
 export const RankingView: React.FC = () => {
-  const {
-    gamesList,
-    activeGameId,
-    fetchGamesList,
-    switchGame,
-    isLoadingGames,
-  } = useTrading();
+  const { activeGameId, switchGame, liveQuotes, fxRates, ensureQuotes } = useTrading();
 
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedGameData, setSelectedGameData] = useState<GameSaveData | null>(null);
-  const [isLoadingDetail, setIsLoadingDetail] = useState<boolean>(false);
+  const [games, setGames] = useState<GameSummary[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const [selected, setSelected] = useState<GameSaveData | null>(null);
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [detailTab, setDetailTab] = useState<'positions' | 'history'>('positions');
+  const [joinTarget, setJoinTarget] = useState<GameSummary | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  // PIN Unlock Modal inside Detail
-  const [isPinModalOpen, setIsPinModalOpen] = useState<boolean>(false);
-  const [pinInput, setPinInput] = useState<string>('');
-  const [pinError, setPinError] = useState<string | null>(null);
-
-  // Auto-refresh ranking on mount and realtime updates
-  useEffect(() => {
-    fetchGamesList();
-    const unsub = subscribeToSupabaseRealtime(() => {
-      fetchGamesList();
-    });
-    return () => unsub();
-  }, [fetchGamesList]);
-
-  // Sort leaderboard by Total Net Worth descending
-  const sortedGames = useMemo(() => {
-    return [...gamesList].sort((a, b) => {
-      const netA = a.totalNetWorth ?? a.initialCash;
-      const netB = b.totalNetWorth ?? b.initialCash;
-      return netB - netA;
-    });
-  }, [gamesList]);
-
-  // Filtered leaderboard
-  const filteredGames = useMemo(() => {
-    if (!searchQuery.trim()) return sortedGames;
-    const query = searchQuery.toLowerCase().trim();
-    return sortedGames.filter(
-      (g) => g.name.toLowerCase().includes(query) || g.id.toLowerCase().includes(query)
-    );
-  }, [sortedGames, searchQuery]);
-
-  const handleInspectGame = async (summary: GameSummary) => {
-    setIsLoadingDetail(true);
+  const load = useCallback(async () => {
+    setIsLoading(true);
     try {
-      const fullData = await loadGameData(summary.id);
-      if (fullData) {
-        setSelectedGameData(fullData);
-      } else {
-        setSelectedGameData({
-          ...summary,
-          positions: [],
-          tradeHistory: [],
-          watchlist: [],
-        });
+      const list = await fetchRanking();
+      setLoadError(!list);
+      if (list) setGames(list);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') load();
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, [load]);
+
+  const filtered = useMemo(() => {
+    const sorted = [...games].sort((a, b) => b.totalNetWorth - a.totalNetWorth);
+    const q = searchQuery.trim().toLowerCase();
+    return q ? sorted.filter((g) => g.name.toLowerCase().includes(q) || g.id.toLowerCase().includes(q)) : sorted;
+  }, [games, searchQuery]);
+
+  const rankOf = useMemo(() => {
+    const map = new Map<string, number>();
+    [...games].sort((a, b) => b.totalNetWorth - a.totalNetWorth).forEach((g, i) => map.set(g.id, i + 1));
+    return map;
+  }, [games]);
+
+  const handleInspect = async (summary: GameSummary) => {
+    setActionError(null);
+    setDetailTab('positions');
+    setIsLoadingDetail(true);
+    setSelected({ ...summary, positions: [], tradeHistory: [], watchlist: [], equityHistory: [] });
+    try {
+      const res = await fetchGame(summary.id);
+      if (res.status === 'ok') {
+        setSelected(res.game);
+        ensureQuotes(Array.from(new Set(res.game.positions.map((p) => p.symbol))), 60_000);
       }
     } finally {
       setIsLoadingDetail(false);
     }
   };
 
-  const handlePlayGame = async (game: GameSummary | GameSaveData) => {
-    const isUnlocked = isGameUnlocked(game);
-    if (!isUnlocked) {
-      setIsPinModalOpen(true);
-      return;
+  const handlePlay = async (game: GameSummary) => {
+    setActionError(null);
+    if (getJoinedIds().includes(game.id)) {
+      const res = await switchGame(game.id);
+      if (res.ok) {
+        setSelected(null);
+        return;
+      }
+      if (!res.needsPin) {
+        setActionError(res.error || 'No se ha podido abrir la partida.');
+        return;
+      }
     }
-    await switchGame(game.id);
-    setSelectedGameData(null);
+    setJoinTarget(game);
   };
 
-  const handleUnlockAndPlay = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedGameData) return;
-    const ok = unlockGame(selectedGameData, pinInput);
-    if (ok) {
-      setPinError(null);
-      setIsPinModalOpen(false);
-      setPinInput('');
-      await switchGame(selectedGameData.id);
-      setSelectedGameData(null);
-    } else {
-      setPinError('PIN incorrecto. Inténtalo de nuevo.');
-    }
-  };
+  const selectedViews = useMemo(
+    () => (selected ? selected.positions.map((p) => valuePosition(p, liveQuotes[p.symbol], fxRates)) : []),
+    [selected, liveQuotes, fxRates]
+  );
 
   return (
     <div className="space-y-4 pb-24 max-w-md mx-auto px-4 pt-2">
-      {/* Search and Refresh Bar */}
+      {/* Buscador */}
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
           <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -119,139 +100,84 @@ export const RankingView: React.FC = () => {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar jugador..."
-            className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-white dark:bg-ios-card-dark border border-black/5 dark:border-white/5 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-ios-blue shadow-ios-sm"
+            placeholder="Buscar partida o código..."
+            className="w-full pl-10 pr-9 py-2.5 rounded-2xl bg-white dark:bg-ios-card-dark border border-black/5 dark:border-white/5 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-ios-blue shadow-ios-sm"
           />
           {searchQuery && (
-            <button
-              type="button"
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
-            >
+            <button type="button" onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400" aria-label="Borrar">
               <X className="w-4 h-4" />
             </button>
           )}
         </div>
-
         <button
           type="button"
-          onClick={() => fetchGamesList()}
-          disabled={isLoadingGames}
+          onClick={load}
+          disabled={isLoading}
           className="w-10 h-10 rounded-2xl bg-white dark:bg-ios-card-dark border border-black/5 dark:border-white/5 flex items-center justify-center text-zinc-600 dark:text-zinc-300 shadow-ios-sm ios-active shrink-0"
-          title="Actualizar ranking"
+          aria-label="Actualizar ranking"
         >
-          <RefreshCw className={`w-4 h-4 ${isLoadingGames ? 'animate-spin text-ios-blue' : ''}`} />
+          <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-ios-blue' : ''}`} />
         </button>
       </div>
 
-      {/* Leaderboard Table Section */}
+      {/* Clasificación */}
       <div className="space-y-2">
         <div className="flex items-center justify-between px-1">
-          <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">
-            Clasificación ({filteredGames.length})
-          </span>
-          <span className="text-[11px] text-zinc-400 font-medium">Pulsa para ver apuestas</span>
+          <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">Clasificación ({filtered.length})</span>
+          <span className="text-[11px] text-zinc-400 font-medium">Por patrimonio</span>
         </div>
 
-        {isLoadingGames && filteredGames.length === 0 ? (
-          <div className="py-16 text-center text-zinc-400 space-y-2 bg-white dark:bg-ios-card-dark rounded-3xl border border-black/5 dark:border-white/5 shadow-ios-sm">
-            <RefreshCw className="w-6 h-6 animate-spin mx-auto text-ios-blue" />
-            <p className="text-xs">Cargando clasificación...</p>
+        {isLoading && games.length === 0 ? (
+          <div className="py-16 text-center text-zinc-400 bg-white dark:bg-ios-card-dark rounded-3xl border border-black/5 dark:border-white/5 shadow-ios-sm">
+            <Loader2 className="w-6 h-6 animate-spin mx-auto text-ios-blue" />
           </div>
-        ) : filteredGames.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <div className="p-8 text-center bg-white dark:bg-ios-card-dark rounded-3xl border border-black/5 dark:border-white/5 text-zinc-400 text-xs shadow-ios-sm">
-            No se encontraron jugadores que coincidan con la búsqueda.
+            {loadError ? 'No se ha podido cargar el ranking. Comprueba tu conexión.' : 'No hay partidas que coincidan con la búsqueda.'}
           </div>
         ) : (
           <div className="bg-white dark:bg-ios-card-dark rounded-3xl border border-black/5 dark:border-white/5 shadow-ios divide-y divide-black/5 dark:divide-white/5 overflow-hidden">
-            {filteredGames.map((game, idx) => {
-              const rank = idx + 1;
-              const isTop1 = rank === 1;
-              const isTop2 = rank === 2;
-              const isTop3 = rank === 3;
+            {filtered.map((game) => {
+              const rank = rankOf.get(game.id) ?? 0;
               const isActive = game.id === activeGameId;
-              const isProfit = (game.totalPnL || 0) >= 0;
-              const isPrivate = game.isPrivate ?? true;
-
+              const isUp = game.totalPnLPercent >= 0;
               return (
                 <button
                   key={game.id}
                   type="button"
-                  onClick={() => handleInspectGame(game)}
+                  onClick={() => handleInspect(game)}
                   className={`w-full p-4 flex items-center justify-between text-left transition-colors ios-active hover:bg-zinc-50 dark:hover:bg-zinc-800/40 ${
                     isActive ? 'bg-ios-blue/5 dark:bg-ios-blue/10' : ''
                   }`}
                 >
-                  {/* Left: Rank Badge & Info */}
-                  <div className="flex items-center gap-3">
-                    {/* Rank Badge */}
+                  <div className="flex items-center gap-3 min-w-0">
                     <div
-                      className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
-                        isTop1 || isTop2 || isTop3
-                          ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50 font-extrabold ring-1 ring-black/5 dark:ring-white/10 shadow-sm'
-                          : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 font-mono'
+                      className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 bg-zinc-100 dark:bg-zinc-800 ${
+                        rank <= 3 ? 'text-zinc-900 dark:text-zinc-50 ring-1 ring-black/5 dark:ring-white/10 shadow-sm' : 'text-zinc-400 font-mono'
                       }`}
                     >
-                      {isTop1 ? '🥇' : isTop2 ? '🥈' : isTop3 ? '🥉' : `#${rank}`}
+                      {rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`}
                     </div>
-
-                    <div>
+                    <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <span
-                          className={`text-sm font-bold truncate max-w-[130px] sm:max-w-[180px] ${
-                            isTop1
-                              ? 'text-zinc-900 dark:text-zinc-50 font-extrabold'
-                              : 'text-zinc-900 dark:text-zinc-100'
-                          }`}
-                        >
-                          {game.name}
-                        </span>
-
-                        {isPrivate ? (
-                          <span
-                            title="Partida Privada"
-                            className="text-zinc-400 flex items-center"
-                          >
-                            <Lock className="w-3 h-3" />
-                          </span>
-                        ) : (
-                          <span
-                            title="Partida Pública"
-                            className="text-ios-blue flex items-center"
-                          >
-                            <Globe className="w-3 h-3" />
-                          </span>
-                        )}
-
+                        <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate max-w-[140px] sm:max-w-[180px]">{game.name}</span>
+                        {game.hasPin && <Lock className="w-3 h-3 text-zinc-400 shrink-0" />}
                         {isActive && (
-                          <span className="px-1.5 py-0.5 rounded-md bg-ios-blue/15 text-ios-blue text-[9px] font-bold uppercase tracking-wider">
-                            Tú
-                          </span>
+                          <span className="px-1.5 py-0.5 rounded-md bg-ios-blue/15 text-ios-blue text-[9px] font-bold uppercase tracking-wider">Tú</span>
                         )}
                       </div>
-
                       <span className="text-[11px] text-zinc-400 font-medium">
-                        {game.positionsCount || 0} apuesta(s) activas
+                        {game.positionsCount} posiciones · {formatTimeAgo(game.updatedAt)}
                       </span>
                     </div>
                   </div>
-
-                  {/* Right: Net Worth & Percent Return */}
-                  <div className="flex items-center gap-2 text-right">
+                  <div className="flex items-center gap-2 text-right shrink-0">
                     <div>
-                      <span className="text-sm font-bold font-mono text-zinc-900 dark:text-zinc-50 block">
-                        {formatCurrency(game.totalNetWorth || game.initialCash)}
-                      </span>
-                      <span
-                        className={`text-[11px] font-mono font-bold flex items-center justify-end ${
-                          isProfit ? 'text-ios-green' : 'text-ios-red'
-                        }`}
-                      >
-                        {isProfit ? '+' : ''}
-                        {formatPercent(game.totalPnLPercent || 0)}
+                      <span className="text-sm font-bold font-mono text-zinc-900 dark:text-zinc-50 block">{formatCurrency(game.totalNetWorth)}</span>
+                      <span className={`text-[11px] font-mono font-bold ${isUp ? 'text-ios-green' : 'text-ios-red'}`}>
+                        {formatPercent(game.totalPnLPercent)}
                       </span>
                     </div>
-
                     <ChevronRight className="w-4 h-4 text-zinc-300 dark:text-zinc-600 shrink-0" />
                   </div>
                 </button>
@@ -259,238 +185,163 @@ export const RankingView: React.FC = () => {
             })}
           </div>
         )}
+        <p className="text-[10px] text-zinc-400 text-center px-4">
+          El patrimonio se actualiza cuando el jugador tiene la app abierta. La rentabilidad se mide sobre su capital inicial.
+        </p>
       </div>
 
-      {/* Player Inspect Modal Sheet */}
-      {selectedGameData && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-ios-bg-light dark:bg-ios-bg-dark rounded-t-3xl border-t border-black/10 dark:border-white/10 shadow-2xl max-h-[85vh] flex flex-col max-w-md mx-auto w-full animate-slideUp">
-            {/* Modal Header */}
+      {/* Detalle de una partida */}
+      {selected && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-sm animate-fadeIn" onClick={() => setSelected(null)}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-ios-bg-light dark:bg-ios-bg-dark rounded-t-3xl border-t border-black/10 dark:border-white/10 shadow-2xl max-h-[85vh] flex flex-col max-w-md mx-auto w-full animate-slideUp"
+          >
             <div className="p-4 border-b border-black/5 dark:border-white/10 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-2xl bg-ios-blue/15 text-ios-blue flex items-center justify-center font-bold">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-2xl bg-ios-blue/15 text-ios-blue flex items-center justify-center shrink-0">
                   <Trophy className="w-4 h-4" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <h3 className="text-base font-extrabold text-zinc-900 dark:text-zinc-50 truncate max-w-[190px]">
-                      {selectedGameData.name}
-                    </h3>
-                    {selectedGameData.isPrivate ?? true ? (
-                      <span className="px-2 py-0.5 rounded-full bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-[10px] font-bold flex items-center gap-1">
-                        <Lock className="w-2.5 h-2.5" /> Privada
-                      </span>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded-full bg-ios-blue/15 text-ios-blue text-[10px] font-bold flex items-center gap-1">
-                        <Globe className="w-2.5 h-2.5" /> Pública
-                      </span>
-                    )}
+                    <h3 className="text-base font-extrabold text-zinc-900 dark:text-zinc-50 truncate max-w-[200px]">{selected.name}</h3>
+                    {selected.hasPin && <Lock className="w-3 h-3 text-zinc-400" />}
                   </div>
-                  <p className="text-[10px] font-mono text-zinc-400">
-                    ID: {selectedGameData.id}
-                  </p>
+                  <p className="text-[10px] font-mono text-zinc-400">Código: {selected.id}</p>
                 </div>
               </div>
-
-              <button
-                type="button"
-                onClick={() => setSelectedGameData(null)}
-                className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-800 text-zinc-500 flex items-center justify-center ios-active"
-              >
+              <button type="button" onClick={() => setSelected(null)} className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-800 text-zinc-500 flex items-center justify-center ios-active" aria-label="Cerrar">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Stats Overview Pill */}
             <div className="p-4 bg-white dark:bg-ios-card-dark border-b border-black/5 dark:border-white/5 grid grid-cols-3 gap-2 text-center">
               <div>
-                <span className="text-[10px] uppercase font-bold text-zinc-400 block tracking-wider">
-                  Patrimonio
-                </span>
-                <span className="text-sm font-black font-mono text-zinc-900 dark:text-zinc-50">
-                  {formatCurrency(selectedGameData.totalNetWorth || selectedGameData.initialCash)}
+                <span className="text-[10px] uppercase font-bold text-zinc-400 block tracking-wider">Patrimonio</span>
+                <span className="text-sm font-black font-mono text-zinc-900 dark:text-zinc-50">{formatCurrency(selected.totalNetWorth)}</span>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-zinc-400 block tracking-wider">Rentabilidad</span>
+                <span className={`text-sm font-black font-mono ${selected.totalPnLPercent >= 0 ? 'text-ios-green' : 'text-ios-red'}`}>
+                  {formatPercent(selected.totalPnLPercent)}
                 </span>
               </div>
-
               <div>
-                <span className="text-[10px] uppercase font-bold text-zinc-400 block tracking-wider">
-                  Rendimiento
-                </span>
-                <span
-                  className={`text-sm font-black font-mono ${
-                    (selectedGameData.totalPnLPercent || 0) >= 0 ? 'text-ios-green' : 'text-ios-red'
+                <span className="text-[10px] uppercase font-bold text-zinc-400 block tracking-wider">Disponible</span>
+                <span className="text-sm font-bold font-mono text-zinc-700 dark:text-zinc-300">{formatCurrency(selected.cashAvailable)}</span>
+              </div>
+            </div>
+
+            <div className="flex border-b border-black/5 dark:border-white/10 px-4 pt-2 gap-2">
+              {(['positions', 'history'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setDetailTab(tab)}
+                  className={`pb-2.5 px-3 text-xs font-bold flex items-center gap-1.5 border-b-2 transition-colors ${
+                    detailTab === tab ? 'border-ios-blue text-ios-blue' : 'border-transparent text-zinc-400 hover:text-zinc-600'
                   }`}
                 >
-                  {(selectedGameData.totalPnLPercent || 0) >= 0 ? '+' : ''}
-                  {formatPercent(selectedGameData.totalPnLPercent || 0)}
-                </span>
-              </div>
-
-              <div>
-                <span className="text-[10px] uppercase font-bold text-zinc-400 block tracking-wider">
-                  Disponible
-                </span>
-                <span className="text-sm font-bold font-mono text-zinc-700 dark:text-zinc-300">
-                  {formatCurrency(selectedGameData.cashAvailable || 0)}
-                </span>
-              </div>
+                  {tab === 'positions' ? <Briefcase className="w-3.5 h-3.5" /> : <History className="w-3.5 h-3.5" />}
+                  <span>
+                    {tab === 'positions' ? `Posiciones (${selected.positions.length})` : `Historial (${selected.tradeHistory.length})`}
+                  </span>
+                </button>
+              ))}
             </div>
 
-            {/* Tabs: Apuestas vs Historial */}
-            <div className="flex border-b border-black/5 dark:border-white/10 px-4 pt-2 bg-ios-bg-light dark:bg-ios-bg-dark gap-2">
-              <button
-                type="button"
-                onClick={() => setDetailTab('positions')}
-                className={`pb-2.5 px-3 text-xs font-bold flex items-center gap-1.5 border-b-2 transition-colors ${
-                  detailTab === 'positions'
-                    ? 'border-ios-blue text-ios-blue'
-                    : 'border-transparent text-zinc-400 hover:text-zinc-600'
-                }`}
-              >
-                <Briefcase className="w-3.5 h-3.5" />
-                <span>Apuestas Activas ({selectedGameData.positions?.length || 0})</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setDetailTab('history')}
-                className={`pb-2.5 px-3 text-xs font-bold flex items-center gap-1.5 border-b-2 transition-colors ${
-                  detailTab === 'history'
-                    ? 'border-ios-blue text-ios-blue'
-                    : 'border-transparent text-zinc-400 hover:text-zinc-600'
-                }`}
-              >
-                <History className="w-3.5 h-3.5" />
-                <span>Historial ({selectedGameData.tradeHistory?.length || 0})</span>
-              </button>
-            </div>
-
-            {/* Tab Content List */}
             <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
-              {detailTab === 'positions' ? (
-                selectedGameData.positions && selectedGameData.positions.length > 0 ? (
-                  selectedGameData.positions.map((pos) => {
-                    const isLong = pos.type === 'LONG';
-                    const isProfit = (pos.unrealizedPnL || 0) >= 0;
-
+              {isLoadingDetail ? (
+                <div className="py-10 text-center">
+                  <Loader2 className="w-5 h-5 animate-spin mx-auto text-ios-blue" />
+                </div>
+              ) : detailTab === 'positions' ? (
+                selectedViews.length > 0 ? (
+                  selectedViews.map((pos) => {
+                    const isUp = pos.unrealizedPnL >= 0;
                     return (
-                      <div
-                        key={pos.id}
-                        className="p-3 bg-white dark:bg-ios-card-dark rounded-2xl border border-black/5 dark:border-white/5 shadow-sm flex items-center justify-between"
-                      >
-                        <div>
+                      <div key={pos.id} className="p-3 bg-white dark:bg-ios-card-dark rounded-2xl border border-black/5 dark:border-white/5 shadow-sm flex items-center justify-between">
+                        <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-black font-mono text-zinc-900 dark:text-zinc-100">
-                              {pos.symbol}
-                            </span>
+                            <span className="text-xs font-black font-mono text-zinc-900 dark:text-zinc-100">{pos.symbol}</span>
                             <span
-                              className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md ${
-                                isLong
-                                  ? 'bg-ios-green/15 text-ios-green'
-                                  : 'bg-ios-orange/15 text-ios-orange'
+                              className={`text-[10px] font-bold px-1.5 rounded-md ${
+                                pos.type === 'LONG' ? 'bg-ios-green/15 text-ios-green' : 'bg-ios-orange/15 text-ios-orange'
                               }`}
                             >
-                              {isLong ? 'Largo' : 'Corto'}
+                              {pos.type === 'LONG' ? 'Largo' : 'Corto'}
                             </span>
                           </div>
-                          <span className="text-[11px] text-zinc-400 block truncate max-w-[180px]">
-                            {pos.name}
-                          </span>
+                          <span className="text-[11px] text-zinc-400 block truncate max-w-[180px]">{pos.name}</span>
                           <span className="text-[10px] text-zinc-400 font-mono mt-0.5 block">
-                            Invertido: {formatCurrency(pos.investedAmount)} • Entrada: {formatCurrency(pos.entryPrice)}
+                            Invertido {formatCurrency(pos.investedAmount)} · entrada {formatCurrency(pos.entryPrice, pos.currency)}
                           </span>
                         </div>
-
-                        <div className="text-right">
+                        <div className="text-right shrink-0">
                           <span className="text-xs font-bold font-mono text-zinc-900 dark:text-zinc-50 block">
-                            {formatCurrency(pos.currentValue)}
+                            {pos.hasPrice ? formatCurrency(pos.currentValue) : '—'}
                           </span>
-                          <span
-                            className={`text-[11px] font-mono font-bold ${
-                              isProfit ? 'text-ios-green' : 'text-ios-red'
-                            }`}
-                          >
-                            {isProfit ? '+' : ''}
-                            {formatCurrency(pos.unrealizedPnL || 0)} ({formatPercent(pos.unrealizedPnLPercent || 0)})
-                          </span>
+                          {pos.hasPrice && (
+                            <span className={`text-[11px] font-mono font-bold ${isUp ? 'text-ios-green' : 'text-ios-red'}`}>
+                              {formatPercent(pos.unrealizedPnLPercent)}
+                            </span>
+                          )}
                         </div>
                       </div>
                     );
                   })
                 ) : (
-                  <div className="p-8 text-center text-zinc-400 text-xs">
-                    Este jugador no tiene apuestas abiertas en este momento.
-                  </div>
+                  <div className="p-8 text-center text-zinc-400 text-xs">No tiene posiciones abiertas ahora mismo.</div>
                 )
-              ) : selectedGameData.tradeHistory && selectedGameData.tradeHistory.length > 0 ? (
-                selectedGameData.tradeHistory.map((trade) => {
-                  const isProfit = (trade.realizedPnL || 0) >= 0;
+              ) : selected.tradeHistory.length > 0 ? (
+                selected.tradeHistory.map((trade) => {
+                  const isUp = (trade.realizedPnL || 0) >= 0;
                   const date = new Date(trade.timestamp);
-                  const formattedDate = `${date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric' })} ${date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
-
+                  const isOpen = trade.action.startsWith('OPEN');
                   return (
-                    <div
-                      key={trade.id}
-                      className="p-3 bg-white dark:bg-ios-card-dark rounded-2xl border border-black/5 dark:border-white/5 shadow-sm flex items-center justify-between text-xs"
-                    >
+                    <div key={trade.id} className="p-3 bg-white dark:bg-ios-card-dark rounded-2xl border border-black/5 dark:border-white/5 shadow-sm flex items-center justify-between text-xs">
                       <div>
                         <div className="flex items-center gap-1.5">
-                          <span className="font-mono font-bold text-zinc-900 dark:text-zinc-100">
-                            {trade.symbol}
-                          </span>
+                          <span className="font-mono font-bold text-zinc-900 dark:text-zinc-100">{trade.symbol}</span>
                           <span className="text-[10px] font-medium text-zinc-400">
-                            {trade.action.replace('_', ' ')}
+                            {isOpen ? (trade.type === 'LONG' ? 'Compra' : 'Venta en corto') : 'Cierre'}
                           </span>
                         </div>
-                        <span className="text-[10px] text-zinc-400 block">{formattedDate}</span>
+                        <span className="text-[10px] text-zinc-400 block">
+                          {date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}{' '}
+                          {date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
                       </div>
-
                       <div className="text-right font-mono font-bold">
                         {trade.realizedPnL !== undefined ? (
-                          <span className={isProfit ? 'text-ios-green' : 'text-ios-red'}>
-                            {isProfit ? '+' : ''}
+                          <span className={isUp ? 'text-ios-green' : 'text-ios-red'}>
+                            {isUp ? '+' : ''}
                             {formatCurrency(trade.realizedPnL)}
                           </span>
                         ) : (
-                          <span className="text-zinc-500">
-                            {formatCurrency(trade.investedAmount)}
-                          </span>
+                          <span className="text-zinc-500">{formatCurrency(trade.investedAmount)}</span>
                         )}
                       </div>
                     </div>
                   );
                 })
               ) : (
-                <div className="p-8 text-center text-zinc-400 text-xs">
-                  No hay operaciones registradas en el historial.
-                </div>
+                <div className="p-8 text-center text-zinc-400 text-xs">Todavía no hay operaciones.</div>
               )}
             </div>
 
-            {/* Bottom Actions */}
-            <div className="p-4 border-t border-black/5 dark:border-white/10 bg-white dark:bg-ios-card-dark flex gap-2">
-              {selectedGameData.id === activeGameId ? (
-                <div className="w-full py-3 rounded-2xl bg-ios-blue/15 text-ios-blue text-xs font-bold text-center flex items-center justify-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>Tu partida en curso</span>
-                </div>
+            <div className="p-4 pb-safe border-t border-black/5 dark:border-white/10 bg-white dark:bg-ios-card-dark space-y-2">
+              {actionError && <div className="p-2 bg-red-500/10 text-ios-red text-xs rounded-xl font-medium">{actionError}</div>}
+              {selected.id === activeGameId ? (
+                <div className="w-full py-3 rounded-2xl bg-ios-blue/15 text-ios-blue text-xs font-bold text-center">Es tu partida actual</div>
               ) : (
                 <button
                   type="button"
-                  onClick={() => handlePlayGame(selectedGameData)}
+                  onClick={() => handlePlay(selected)}
                   className="w-full py-3.5 rounded-2xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-bold shadow-md ios-active flex items-center justify-center gap-2"
                 >
-                  {isGameUnlocked(selectedGameData) ? (
-                    <>
-                      <span>Entrar a esta Partida</span>
-                      <ChevronRight className="w-4 h-4" />
-                    </>
-                  ) : (
-                    <>
-                      <KeyRound className="w-4 h-4 text-ios-blue" />
-                      <span>Desbloquear con PIN para Operar</span>
-                    </>
-                  )}
+                  <LogIn className="w-4 h-4" />
+                  <span>{getJoinedIds().includes(selected.id) ? 'Cambiar a esta partida' : 'Unirme a esta partida'}</span>
                 </button>
               )}
             </div>
@@ -498,79 +349,14 @@ export const RankingView: React.FC = () => {
         </div>
       )}
 
-      {/* PIN Unlock Modal */}
-      {isPinModalOpen && selectedGameData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
-          <div className="bg-white dark:bg-ios-card-dark rounded-3xl p-5 border border-black/10 dark:border-white/10 shadow-2xl max-w-sm w-full space-y-4 animate-scaleUp">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-ios-blue/15 text-ios-blue flex items-center justify-center">
-                  <KeyRound className="w-4 h-4" />
-                </div>
-                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-50">
-                  Partida Privada Protegida
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsPinModalOpen(false);
-                  setPinInput('');
-                  setPinError(null);
-                }}
-                className="text-zinc-400 hover:text-zinc-600"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Introduce el PIN de <strong>"{selectedGameData.name}"</strong> para desbloquear el control y operar en este dispositivo:
-            </p>
-
-            <form onSubmit={handleUnlockAndPlay} className="space-y-3">
-              <input
-                type="password"
-                autoFocus
-                value={pinInput}
-                onChange={(e) => {
-                  setPinInput(e.target.value);
-                  setPinError(null);
-                }}
-                placeholder="Escribe el PIN..."
-                className="w-full px-3.5 py-2.5 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-center font-mono text-base tracking-widest text-zinc-900 dark:text-zinc-50 border border-black/5 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-ios-blue"
-              />
-
-              {pinError && (
-                <div className="p-2 bg-red-500/10 text-ios-red text-xs rounded-xl flex items-center gap-1.5 font-medium">
-                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                  <span>{pinError}</span>
-                </div>
-              )}
-
-              <div className="flex gap-2 pt-1">
-                <button
-                  type="submit"
-                  disabled={!pinInput.trim()}
-                  className="flex-1 py-3 rounded-2xl bg-ios-blue text-white font-bold text-xs shadow-md ios-active disabled:opacity-50"
-                >
-                  Desbloquear y Entrar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsPinModalOpen(false);
-                    setPinInput('');
-                    setPinError(null);
-                  }}
-                  className="px-4 py-3 rounded-2xl bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-semibold ios-active"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {joinTarget && (
+        <JoinGameSheet
+          initialCode={joinTarget.id}
+          gameName={joinTarget.name}
+          knownHasPin={joinTarget.hasPin}
+          onClose={() => setJoinTarget(null)}
+          onJoined={() => setSelected(null)}
+        />
       )}
     </div>
   );

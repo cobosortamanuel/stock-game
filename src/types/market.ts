@@ -16,6 +16,7 @@ export interface ChartPoint {
 export interface StockQuote {
   symbol: string;
   name: string;
+  /** Precio en la divisa nativa del activo (ver `currency`) */
   price: number;
   change: number;
   changePercent: number;
@@ -25,45 +26,49 @@ export interface StockQuote {
   prevClose: number;
   volume: string;
   marketCap: string;
-  peRatio?: number;
   week52High?: number;
   week52Low?: number;
   currency: string;
   exchange: string;
-  sector?: string;
-  description?: string;
-  historicalChanges?: {
-    '1H'?: number;
-    '1D': number;
-    '1W': number;
-    '1M': number;
-    '1Y': number;
-    '5Y': number;
-    'ALL': number;
-  };
+  instrumentType?: string;
+  /** Momento de la última cotización (ms) */
+  marketTime?: number;
+  /** Inicio y fin de la sesión regular actual/última (ms) */
+  sessionStart?: number;
+  sessionEnd?: number;
+  /** Estado según Yahoo: REGULAR, PRE, POST, CLOSED... (sólo en algunas fuentes) */
+  marketState?: string;
+  /** Cuándo se descargó esta cotización (ms) */
+  fetchedAt: number;
 }
 
+/** Posición tal y como se guarda (sin valores derivados de precios). */
 export interface Position {
   id: string;
   symbol: string;
   name: string;
-  type: PositionType; // LONG = Compra tradicional, SHORT = Venta en corto
+  type: PositionType; // LONG = compra, SHORT = venta en corto
   shares: number;
+  /** Precio de entrada en la divisa nativa */
   entryPrice: number;
-  investedAmount: number; // Dinero apostado / margen
+  /** Capital invertido en USD */
+  investedAmount: number;
+  openedAt: number;
+  /** Divisa nativa del activo. Posiciones antiguas: se asume USD. */
+  currency?: string;
+  /** USD por unidad de divisa nativa en la apertura */
+  entryFx?: number;
+}
+
+/** Posición con valores calculados a partir de la cotización actual. */
+export interface PositionView extends Position {
   currentPrice: number;
   currentValue: number;
-  unrealizedPnL: number; // Ganancia/Pérdida en $
-  unrealizedPnLPercent: number; // Ganancia/Pérdida en %
-  openedAt: number;
-  timeframePnL?: {
-    '1H'?: number;
-    '1D': number;
-    '1W': number;
-    '1M': number;
-    '1Y': number;
-    'ALL': number;
-  };
+  unrealizedPnL: number;
+  unrealizedPnLPercent: number;
+  dayPnL: number;
+  /** false si no hay ninguna cotización (se usa el precio de entrada) */
+  hasPrice: boolean;
 }
 
 export interface TradeRecord {
@@ -79,15 +84,13 @@ export interface TradeRecord {
   realizedPnL?: number;
   realizedPnLPercent?: number;
   timestamp: number;
+  currency?: string;
 }
 
-export interface PortfolioSnapshot {
-  timestamp: number;
-  date: string;
-  netWorth: number;
-  cashAvailable: number;
-  cashInvested: number;
-  pnl: number;
+/** Punto del historial de patrimonio: t = ms, v = patrimonio en USD */
+export interface EquityPoint {
+  t: number;
+  v: number;
 }
 
 export interface SearchResult {
@@ -111,12 +114,12 @@ export interface GameSummary {
   totalPnL: number;
   totalPnLPercent: number;
   positionsCount: number;
-  isPrivate?: boolean;
-  pinCode?: string;
+  hasPin: boolean;
 }
 
 export interface GameSaveData extends GameSummary {
   positions: Position[];
   tradeHistory: TradeRecord[];
   watchlist: string[];
+  equityHistory: EquityPoint[];
 }

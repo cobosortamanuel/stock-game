@@ -1,16 +1,14 @@
 import React from 'react';
-import { Search, Moon, Sun, RefreshCw, TrendingUp, Lock, Globe } from 'lucide-react';
+import { Search, Moon, Sun, RefreshCw, TrendingUp, ChevronDown } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 
 interface HeaderProps {
   title?: string;
-  subtitle?: string;
   onOpenSearch: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   title = 'Stock Game',
-  subtitle,
   onOpenSearch,
 }) => {
   const {
@@ -19,42 +17,30 @@ export const Header: React.FC<HeaderProps> = ({
     isSyncing,
     refreshMarketData,
     activeGameName,
-    isCurrentGamePrivate,
-    isCurrentGameUnlocked,
     openLobby,
   } = useTrading();
 
   return (
     <header className="sticky top-0 z-30 w-full pt-safe ios-glass-header border-b border-black/5 dark:border-white/10 transition-colors duration-200">
       <div className="max-w-md mx-auto px-4 h-14 flex items-center justify-between">
-        {/* Title / Active Game Info */}
-        <div className="flex items-center gap-2.5">
-          <button
-            type="button"
-            onClick={openLobby}
-            className="flex items-center gap-2 text-left group ios-active"
-            title="Cambiar o crear partida"
-          >
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-ios-green text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
-              <TrendingUp className="w-4 h-4 stroke-[2.5]" />
-            </div>
-            <div>
-              <div className="flex items-center gap-1">
-                <span className="text-sm font-bold text-zinc-900 dark:text-zinc-50 leading-tight block truncate max-w-[130px] sm:max-w-[180px]">
-                  {activeGameName || title}
-                </span>
-                {isCurrentGamePrivate ? (
-                  <Lock className="w-3 h-3 text-zinc-400 dark:text-zinc-500 shrink-0" />
-                ) : (
-                  <Globe className="w-3 h-3 text-ios-blue shrink-0" />
-                )}
-              </div>
-              <p className="text-[11px] text-ios-blue font-bold tracking-tight">
-                {isCurrentGamePrivate && !isCurrentGameUnlocked ? 'Modo Espectador' : 'Partida'}
-              </p>
-            </div>
-          </button>
-        </div>
+        {/* Título de la vista + partida actual (toca para cambiar) */}
+        <button
+          type="button"
+          onClick={openLobby}
+          className="flex items-center gap-2.5 text-left group ios-active min-w-0"
+          title="Cambiar de partida"
+        >
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-ios-green text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform shrink-0">
+            <TrendingUp className="w-4 h-4 stroke-[2.5]" />
+          </div>
+          <div className="min-w-0">
+            <span className="text-sm font-bold text-zinc-900 dark:text-zinc-50 leading-tight block truncate">{title}</span>
+            <span className="text-[11px] text-zinc-500 dark:text-zinc-400 font-medium flex items-center gap-0.5 truncate max-w-[170px]">
+              <span className="truncate">{activeGameName}</span>
+              <ChevronDown className="w-3 h-3 shrink-0" />
+            </span>
+          </div>
+        </button>
 
         {/* Right Controls */}
         <div className="flex items-center gap-1">

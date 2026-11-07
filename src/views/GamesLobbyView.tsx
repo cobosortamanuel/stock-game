@@ -1,170 +1,95 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import {
-  PlusCircle,
-  ChevronRight,
-  X,
-  Loader2,
-  RefreshCw,
-  FolderKanban,
-  Lock,
-  Globe,
-  KeyRound,
-  Dices,
-  AlertCircle,
-  Search,
-} from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { AlertCircle, ChevronRight, Info, KeyRound, Loader2, Lock, LogIn, PlusCircle, RefreshCw, TrendingUp, X } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { formatCurrency, formatPercent } from '../services/marketApi';
-import { subscribeToSupabaseRealtime } from '../services/supabaseService';
-import { isGameUnlocked, unlockGame } from '../services/gamesHubApi';
+import { DEFAULT_INITIAL_CASH, PIN_RE } from '../services/gamesHubApi';
+import { JoinGameSheet } from '../components/common/JoinGameSheet';
 import { GameSummary } from '../types/market';
 
-interface GamesLobbyViewProps {
-  onClose: () => void;
-}
+const CAPITAL_OPTIONS = [1000, 10000, 50000, 100000];
 
-export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
+export const GamesLobbyView: React.FC = () => {
   const {
-    gamesList,
     activeGameId,
+    myGames,
     isLoadingGames,
-    fetchGamesList,
+    refreshMyGames,
     createGame,
     switchGame,
+    closeLobby,
+    lobbyNotice,
   } = useTrading();
 
-  // Search state
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [isCreating, setIsCreating] = useState(false);
+  const [name, setName] = useState('');
+  const [capital, setCapital] = useState(DEFAULT_INITIAL_CASH);
+  const [usePin, setUsePin] = useState(false);
+  const [pin, setPin] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
-  // Create form state
-  const [isCreating, setIsCreating] = useState<boolean>(false);
-  const [newGameName, setNewGameName] = useState<string>('');
-  const [isPrivate, setIsPrivate] = useState<boolean>(true);
-  const [pinCode, setPinCode] = useState<string>('');
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [joinSheet, setJoinSheet] = useState<{ code?: string; name?: string; hasPin?: boolean; message?: string } | null>(null);
+  const [enteringId, setEnteringId] = useState<string | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
 
-  // PIN Unlock Modal for Locked Games
-  const [pinModalGame, setPinModalGame] = useState<GameSummary | null>(null);
-  const [pinInput, setPinInput] = useState<string>('');
-  const [pinError, setPinError] = useState<string | null>(null);
-
-  // Stable sort: Active game pinned to top, remaining sorted stably by createdAt (no flickering/jumping)
-  const sortedGames = useMemo(() => {
-    return [...gamesList].sort((a, b) => {
-      if (a.id === activeGameId) return -1;
-      if (b.id === activeGameId) return 1;
-      const timeA = a.createdAt || a.updatedAt || 0;
-      const timeB = b.createdAt || b.updatedAt || 0;
-      if (timeB !== timeA) return timeB - timeA;
-      return a.id.localeCompare(b.id);
-    });
-  }, [gamesList, activeGameId]);
-
-  // Filtered games by search query (name or ID)
-  const filteredGames = useMemo(() => {
-    if (!searchQuery.trim()) return sortedGames;
-    const q = searchQuery.toLowerCase().trim();
-    return sortedGames.filter(
-      (g) => g.name.toLowerCase().includes(q) || g.id.toLowerCase().includes(q)
-    );
-  }, [sortedGames, searchQuery]);
-
-  // Realtime subscription (debounced)
+  // Aviso que pide volver a introducir el PIN de una partida
   useEffect(() => {
-    fetchGamesList();
-    let debounceTimer: any = null;
-    const unsub = subscribeToSupabaseRealtime(() => {
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        fetchGamesList();
-      }, 1000);
-    });
-    return () => {
-      clearTimeout(debounceTimer);
-      unsub();
-    };
-  }, [fetchGamesList]);
+    if (lobbyNotice?.joinGameId) {
+      setJoinSheet({ code: lobbyNotice.joinGameId, hasPin: true, message: lobbyNotice.message });
+    }
+  }, [lobbyNotice]);
 
-  // Generate 4-digit PIN helper
-  const handleGeneratePin = () => {
-    const randomPin = Math.floor(1000 + Math.random() * 9000).toString();
-    setPinCode(randomPin);
-  };
-
-  const handleCreateSubmit = async (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
+    if (usePin && !PIN_RE.test(pin)) {
+      setFormError('El PIN debe tener entre 4 y 8 dígitos.');
+      return;
+    }
     setIsSubmitting(true);
+    setFormError(null);
     try {
-      const finalPin = isPrivate ? (pinCode.trim() || Math.floor(1000 + Math.random() * 9000).toString()) : undefined;
-      await createGame(newGameName.trim() || 'Nueva Partida', isPrivate, finalPin);
-      setNewGameName('');
-      setPinCode('');
-      setIsCreating(false);
-      onClose();
+      const res = await createGame(name, capital, usePin ? pin : undefined);
+      if (!res.ok) setFormError(res.error || 'No se ha podido crear la partida.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleEnterGame = async (game: GameSummary) => {
-    const isUnlocked = isGameUnlocked(game);
-    if (isUnlocked) {
-      await switchGame(game.id);
-      onClose();
-    } else {
-      setPinModalGame(game);
-      setPinInput('');
-      setPinError(null);
+  const handleEnter = async (game: GameSummary) => {
+    setListError(null);
+    setEnteringId(game.id);
+    try {
+      const res = await switchGame(game.id);
+      if (!res.ok) {
+        if (res.needsPin) setJoinSheet({ code: game.id, name: game.name, hasPin: true });
+        else setListError(res.error || 'No se ha podido abrir la partida.');
+      }
+    } finally {
+      setEnteringId(null);
     }
   };
-
-  const handleUnlockAndEnter = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!pinModalGame) return;
-    const ok = unlockGame(pinModalGame, pinInput);
-    if (ok) {
-      const targetId = pinModalGame.id;
-      setPinError(null);
-      setPinModalGame(null);
-      await switchGame(targetId);
-      onClose();
-    } else {
-      setPinError('PIN incorrecto. Vuelve a intentarlo.');
-    }
-  };
-
-  const canClose = gamesList.length > 0;
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-ios-bg-light dark:bg-ios-bg-dark animate-fadeIn">
-      {/* Top Header */}
-      <div className="pt-safe px-4 pb-3 ios-glass-header border-b border-black/5 dark:border-white/10 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-            Salas y Partidas
-          </h1>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            Sincronizadas en tiempo real en todos tus dispositivos
-          </p>
-        </div>
-
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => fetchGamesList()}
-            disabled={isLoadingGames}
-            className="w-9 h-9 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 ios-active"
-            aria-label="Actualizar lista de partidas"
-          >
-            <RefreshCw className={`w-4 h-4 ${isLoadingGames ? 'animate-spin text-ios-blue' : ''}`} />
-          </button>
-
-          {canClose && (
+      {/* Cabecera */}
+      <div className="pt-safe ios-glass-header border-b border-black/5 dark:border-white/10">
+        <div className="max-w-md mx-auto px-4 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-ios-green text-white flex items-center justify-center shadow-sm">
+              <TrendingUp className="w-4 h-4 stroke-[2.5]" />
+            </div>
+            <div>
+              <h1 className="text-sm font-bold text-zinc-900 dark:text-zinc-50 leading-tight">Stock Game</h1>
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Invierte con cotizaciones reales</p>
+            </div>
+          </div>
+          {activeGameId && (
             <button
               type="button"
-              onClick={onClose}
-              className="w-9 h-9 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 ios-active"
+              onClick={closeLobby}
+              className="w-9 h-9 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-300 ios-active"
+              aria-label="Cerrar"
             >
               <X className="w-4 h-4" />
             </button>
@@ -172,404 +97,221 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ onClose }) => {
         </div>
       </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 max-w-md mx-auto w-full space-y-4">
-        {/* Create Game Trigger Button */}
-        <button
-          type="button"
-          onClick={() => setIsCreating(true)}
-          className="w-full py-4 px-4 rounded-3xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-bold text-sm flex items-center justify-center gap-2 shadow-ios ios-active hover:opacity-95"
-        >
-          <PlusCircle className="w-5 h-5 text-ios-blue" />
-          <span>Crear Nueva Partida</span>
-        </button>
-
-        {/* Create Modal Form */}
-        {isCreating && (
-          <div className="p-5 bg-white dark:bg-ios-card-dark rounded-3xl border border-black/10 dark:border-white/10 shadow-ios space-y-4 animate-fadeIn">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-50">
-                Nueva Partida de Trading
-              </h2>
-              <button
-                type="button"
-                onClick={() => setIsCreating(false)}
-                className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
-              >
-                <X className="w-4 h-4" />
-              </button>
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-md mx-auto w-full px-4 py-4 space-y-4">
+          {lobbyNotice && !lobbyNotice.joinGameId && (
+            <div className="p-3 rounded-2xl bg-ios-blue/10 text-ios-blue text-xs font-medium flex items-center gap-2">
+              <Info className="w-4 h-4 shrink-0" />
+              <span>{lobbyNotice.message}</span>
             </div>
+          )}
 
-            <form onSubmit={handleCreateSubmit} className="space-y-4">
+          {!activeGameId && myGames.length === 0 && (
+            <div className="text-center pt-4 pb-2 space-y-1">
+              <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-50">Empieza a invertir</h2>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-xs mx-auto">
+                Crea tu propia partida o únete a la de un amigo con su código.
+              </p>
+            </div>
+          )}
+
+          {/* Acciones principales */}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setIsCreating((v) => !v);
+                setFormError(null);
+              }}
+              className="py-4 px-3 rounded-3xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-bold text-sm flex items-center justify-center gap-2 shadow-ios ios-active"
+            >
+              <PlusCircle className="w-5 h-5 text-ios-blue" />
+              <span>Crear partida</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setJoinSheet({})}
+              className="py-4 px-3 rounded-3xl bg-white dark:bg-ios-card-dark border border-black/5 dark:border-white/10 text-zinc-900 dark:text-zinc-50 font-bold text-sm flex items-center justify-center gap-2 shadow-ios-sm ios-active"
+            >
+              <LogIn className="w-5 h-5 text-ios-blue" />
+              <span>Unirme</span>
+            </button>
+          </div>
+
+          {/* Formulario de creación */}
+          {isCreating && (
+            <form
+              onSubmit={handleCreate}
+              className="p-5 bg-white dark:bg-ios-card-dark rounded-3xl border border-black/10 dark:border-white/10 shadow-ios space-y-4 animate-fadeIn"
+            >
               <div>
-                <label className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 block mb-1.5">
-                  Nombre de la partida:
-                </label>
+                <label className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 block mb-1.5">Nombre</label>
                 <input
                   type="text"
                   autoFocus
-                  value={newGameName}
-                  onChange={(e) => setNewGameName(e.target.value)}
-                  placeholder="Ej: Reto 10k, Mis Inversiones..."
+                  value={name}
+                  maxLength={40}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Ej: Mi cartera, Reto con amigos..."
                   className="w-full px-3.5 py-2.5 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-sm text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 border border-black/5 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-ios-blue"
                 />
               </div>
 
-              {/* Fixed Budget Badge */}
-              <div className="p-3 bg-zinc-100 dark:bg-zinc-800/70 rounded-2xl flex items-center justify-between text-xs">
-                <span className="text-zinc-500 dark:text-zinc-400 font-medium">
-                  Presupuesto Inicial:
-                </span>
-                <span className="font-mono font-bold text-zinc-900 dark:text-zinc-100">
-                  {formatCurrency(10000)}
-                </span>
-              </div>
-
-              {/* Privacy Selector */}
               <div>
-                <label className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 block mb-1.5">
-                  Visibilidad y Privacidad:
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsPrivate(true)}
-                    className={`py-2.5 px-3 rounded-2xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 ios-active ${
-                      isPrivate
-                        ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 border-transparent shadow-sm'
-                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-black/5 dark:border-white/5'
-                    }`}
-                  >
-                    <Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500" />
-                    <span>Privada (con PIN)</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setIsPrivate(false)}
-                    className={`py-2.5 px-3 rounded-2xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 ios-active ${
-                      !isPrivate
-                        ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 border-transparent shadow-sm'
-                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-black/5 dark:border-white/5'
-                    }`}
-                  >
-                    <Globe className="w-3.5 h-3.5 text-ios-blue" />
-                    <span>Pública</span>
-                  </button>
+                <label className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 block mb-1.5">Capital inicial</label>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {CAPITAL_OPTIONS.map((amount) => (
+                    <button
+                      key={amount}
+                      type="button"
+                      onClick={() => setCapital(amount)}
+                      className={`py-2 rounded-xl text-xs font-bold font-mono transition-all ios-active ${
+                        capital === amount
+                          ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 shadow-sm'
+                          : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300'
+                      }`}
+                    >
+                      {formatCurrency(amount, 'USD', false, true)}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {/* PIN Code Setup for Private Game */}
-              {isPrivate && (
-                <div className="p-3.5 bg-zinc-100 dark:bg-zinc-800/80 border border-black/5 dark:border-white/10 rounded-2xl space-y-2.5 animate-fadeIn">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
-                      <KeyRound className="w-3.5 h-3.5 text-ios-blue" />
-                      <span>PIN de Seguridad:</span>
-                    </label>
-                    <button
-                      type="button"
-                      onClick={handleGeneratePin}
-                      className="text-[11px] font-bold text-ios-blue hover:underline flex items-center gap-1"
-                    >
-                      <Dices className="w-3.5 h-3.5" />
-                      <span>Generar PIN</span>
-                    </button>
+              <div className="p-3.5 bg-zinc-100 dark:bg-zinc-800/80 rounded-2xl space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <KeyRound className="w-4 h-4 text-ios-blue" />
+                    <div>
+                      <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 block">Proteger con PIN</span>
+                      <span className="text-[10px] text-zinc-500 dark:text-zinc-400">Sin PIN, cualquiera con el código puede operar</span>
+                    </div>
                   </div>
-
+                  <button
+                    type="button"
+                    onClick={() => setUsePin((v) => !v)}
+                    className={`w-12 h-7 rounded-full transition-colors relative p-0.5 ios-active shrink-0 ${usePin ? 'bg-ios-blue' : 'bg-zinc-300 dark:bg-zinc-700'}`}
+                    aria-label="Proteger con PIN"
+                  >
+                    <div className={`w-6 h-6 rounded-full bg-white shadow-md transition-transform duration-200 ${usePin ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </button>
+                </div>
+                {usePin && (
                   <input
-                    type="text"
-                    value={pinCode}
-                    onChange={(e) => setPinCode(e.target.value)}
-                    placeholder="Ej: 1234 (o pulsa generar)"
-                    className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-zinc-900 text-sm font-mono tracking-widest text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 border border-black/5 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-ios-blue"
+                    type="password"
+                    inputMode="numeric"
+                    value={pin}
+                    maxLength={8}
+                    onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+                    placeholder="PIN de 4 a 8 dígitos"
+                    className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-zinc-900 text-sm font-mono tracking-widest text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 placeholder:tracking-normal border border-black/5 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-ios-blue animate-fadeIn"
                   />
+                )}
+              </div>
 
-                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400 leading-tight">
-                    En este dispositivo se quedará desbloqueada automáticamente. Guarda el PIN si quieres entrar desde tu móvil u otro dispositivo.
-                  </p>
+              {formError && (
+                <div className="p-2 bg-red-500/10 text-ios-red text-xs rounded-xl flex items-center gap-1.5 font-medium">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{formError}</span>
                 </div>
               )}
 
-              <div className="flex gap-2 pt-1">
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="flex-1 py-3 rounded-2xl bg-ios-blue text-white text-xs font-bold shadow-md ios-active flex items-center justify-center gap-1.5"
-                >
-                  {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                  <span>Empezar Partida</span>
-                </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full py-3 rounded-2xl bg-ios-blue text-white text-xs font-bold shadow-md ios-active flex items-center justify-center gap-1.5 disabled:opacity-60"
+              >
+                {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                <span>Empezar con {formatCurrency(capital, 'USD', false, true)}</span>
+              </button>
+            </form>
+          )}
 
+          {/* Mis partidas */}
+          {myGames.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-2 px-1">
+                <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">Mis partidas</span>
                 <button
                   type="button"
-                  onClick={() => setIsCreating(false)}
-                  className="px-4 py-3 rounded-2xl bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-semibold ios-active"
+                  onClick={() => refreshMyGames()}
+                  disabled={isLoadingGames}
+                  className="p-1 text-zinc-400 hover:text-zinc-600 ios-active"
+                  aria-label="Actualizar"
                 >
-                  Cancelar
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingGames ? 'animate-spin text-ios-blue' : ''}`} />
                 </button>
               </div>
-            </form>
-          </div>
-        )}
 
-        {/* Search Bar for Games */}
-        {gamesList.length > 0 && (
-          <div className="relative">
-            <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar partida por nombre o código ID..."
-              className="w-full pl-10 pr-9 py-2.5 rounded-2xl bg-white dark:bg-ios-card-dark border border-black/5 dark:border-white/5 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-ios-blue shadow-ios-sm"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-        )}
+              {listError && (
+                <div className="mb-2 p-2 bg-red-500/10 text-ios-red text-xs rounded-xl flex items-center gap-1.5 font-medium">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{listError}</span>
+                </div>
+              )}
 
-        {/* Games List Section */}
-        <div>
-          <div className="flex items-center justify-between mb-3 px-1">
-            <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">
-              Partidas ({filteredGames.length})
-            </span>
-          </div>
-
-          {isLoadingGames && gamesList.length === 0 ? (
-            <div className="py-16 text-center text-zinc-400 space-y-2">
-              <Loader2 className="w-6 h-6 animate-spin mx-auto text-ios-blue" />
-              <p className="text-xs">Cargando tus partidas...</p>
-            </div>
-          ) : gamesList.length > 0 && filteredGames.length === 0 ? (
-            <div className="p-8 text-center bg-white dark:bg-ios-card-dark rounded-3xl border border-black/5 dark:border-white/5 text-zinc-400 text-xs shadow-ios-sm">
-              No se encontraron partidas que coincidan con "{searchQuery}".
-            </div>
-          ) : filteredGames.length > 0 ? (
-            <div className="space-y-3">
-              {filteredGames.map((game) => {
-                const isActive = game.id === activeGameId;
-                const isProfitable = (game.totalPnL || 0) >= 0;
-                const isPriv = game.isPrivate ?? true;
-                const unlocked = isGameUnlocked(game);
-                const date = new Date(game.updatedAt);
-                const timeAgo = `${date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric' })} ${date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
-
-                return (
-                  <div
-                    key={game.id}
-                    className={`bg-white dark:bg-ios-card-dark rounded-3xl p-4 border transition-all duration-200 shadow-ios-sm relative ${
-                      isActive
-                        ? 'border-ios-blue dark:border-ios-blue ring-2 ring-ios-blue/20'
-                        : 'border-black/5 dark:border-white/5 hover:border-black/20 dark:hover:border-white/20'
-                    }`}
-                  >
-                    {/* Header: Name, Privacy Badge */}
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1 mr-2">
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-bold text-base text-zinc-900 dark:text-zinc-50 truncate">
-                            {game.name}
-                          </h3>
-
-                          {isPriv ? (
-                            <span
-                              title="Partida Privada"
-                              className="px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-[10px] font-bold flex items-center gap-1"
-                            >
-                              <Lock className="w-2.5 h-2.5 text-zinc-500" />
-                              <span>{unlocked ? 'Desbloqueada' : 'PIN'}</span>
-                            </span>
-                          ) : (
-                            <span
-                              title="Partida Pública"
-                              className="px-2 py-0.5 rounded-full bg-ios-blue/15 text-ios-blue text-[10px] font-bold flex items-center gap-1"
-                            >
-                              <Globe className="w-2.5 h-2.5" />
-                              <span>Pública</span>
-                            </span>
-                          )}
-
+              <div className="bg-white dark:bg-ios-card-dark rounded-3xl border border-black/5 dark:border-white/5 shadow-ios divide-y divide-black/5 dark:divide-white/5 overflow-hidden">
+                {myGames.map((game) => {
+                  const isActive = game.id === activeGameId;
+                  const isUp = (game.totalPnLPercent || 0) >= 0;
+                  return (
+                    <button
+                      key={game.id}
+                      type="button"
+                      onClick={() => handleEnter(game)}
+                      className={`w-full p-4 flex items-center justify-between text-left ios-active hover:bg-zinc-50 dark:hover:bg-zinc-800/40 ${
+                        isActive ? 'bg-ios-blue/5 dark:bg-ios-blue/10' : ''
+                      }`}
+                    >
+                      <div className="min-w-0 mr-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-sm font-bold text-zinc-900 dark:text-zinc-50 truncate">{game.name}</span>
+                          {game.hasPin && <Lock className="w-3 h-3 text-zinc-400 shrink-0" />}
                           {isActive && (
-                            <span className="px-2 py-0.5 rounded-full bg-ios-blue/15 text-ios-blue text-[10px] font-bold tracking-wider uppercase border border-ios-blue/30">
-                              Activa
+                            <span className="px-1.5 py-0.5 rounded-md bg-ios-blue/15 text-ios-blue text-[9px] font-bold uppercase tracking-wider shrink-0">
+                              Actual
                             </span>
                           )}
                         </div>
-
-                        <p className="text-[11px] text-zinc-400 font-mono mt-0.5">
-                          ID: {game.id} • Actualizado: {timeAgo}
-                        </p>
+                        <span className="text-[11px] text-zinc-400 font-mono">{game.id}</span>
                       </div>
-                    </div>
-
-                    {/* Stats Row */}
-                    <div className="mt-3 pt-3 border-t border-black/5 dark:border-white/5 grid grid-cols-3 gap-2 text-left">
-                      <div>
-                        <span className="text-[10px] text-zinc-400 uppercase tracking-wider block font-medium">
-                          Patrimonio
-                        </span>
-                        <span className="text-xs sm:text-sm font-bold font-mono text-zinc-900 dark:text-zinc-100">
-                          {formatCurrency(game.totalNetWorth || game.initialCash)}
-                        </span>
-                      </div>
-
-                      <div>
-                        <span className="text-[10px] text-zinc-400 uppercase tracking-wider block font-medium">
-                          Rendimiento
-                        </span>
-                        <span
-                          className={`text-xs sm:text-sm font-bold font-mono flex items-center ${
-                            isProfitable ? 'text-ios-green' : 'text-ios-red'
-                          }`}
-                        >
-                          {isProfitable ? '+' : ''}{formatPercent(game.totalPnLPercent || 0)}
-                        </span>
-                      </div>
-
-                      <div className="text-right">
-                        <span className="text-[10px] text-zinc-400 uppercase tracking-wider block font-medium">
-                          Apuestas
-                        </span>
-                        <span className="text-xs sm:text-sm font-semibold text-zinc-600 dark:text-zinc-300">
-                          {game.positionsCount || 0} abiertas
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Enter Game Action */}
-                    <div className="mt-3 pt-2.5 border-t border-black/5 dark:border-white/5 flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleEnterGame(game)}
-                        className={`w-full py-2.5 px-3 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 ios-active transition-all ${
-                          isActive
-                            ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 border border-black/5 dark:border-white/5'
-                            : 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 shadow-md'
-                        }`}
-                      >
-                        {unlocked ? (
-                          <>
-                            <span>{isActive ? 'Continuar Partida Actual' : 'Entrar a esta Partida'}</span>
-                            <ChevronRight className="w-3.5 h-3.5" />
-                          </>
+                      <div className="flex items-center gap-2 text-right shrink-0">
+                        <div>
+                          <span className="text-sm font-bold font-mono text-zinc-900 dark:text-zinc-50 block">
+                            {formatCurrency(game.totalNetWorth)}
+                          </span>
+                          <span className={`text-[11px] font-mono font-bold ${isUp ? 'text-ios-green' : 'text-ios-red'}`}>
+                            {formatPercent(game.totalPnLPercent || 0)}
+                          </span>
+                        </div>
+                        {enteringId === game.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-ios-blue" />
                         ) : (
-                          <>
-                            <KeyRound className="w-3.5 h-3.5 text-ios-blue" />
-                            <span>Desbloquear con PIN</span>
-                          </>
+                          <ChevronRight className="w-4 h-4 text-zinc-300 dark:text-zinc-600" />
                         )}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="rounded-3xl border border-dashed border-zinc-300 dark:border-zinc-800 p-8 text-center bg-white/50 dark:bg-zinc-900/30 space-y-3">
-              <FolderKanban className="w-10 h-10 text-zinc-400 mx-auto" />
-              <div>
-                <h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-200">
-                  No hay partidas creadas
-                </h3>
-                <p className="text-xs text-zinc-400 mt-1">
-                  Crea tu primera partida para empezar a operar en el simulador.
-                </p>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
-              <button
-                type="button"
-                onClick={() => setIsCreating(true)}
-                className="py-2.5 px-4 rounded-2xl bg-ios-blue text-white text-xs font-bold shadow-md ios-active inline-flex items-center gap-1.5"
-              >
-                <PlusCircle className="w-4 h-4" />
-                <span>Crear Primera Partida</span>
-              </button>
+            </div>
+          )}
+
+          {isLoadingGames && myGames.length === 0 && (
+            <div className="py-8 text-center text-zinc-400">
+              <Loader2 className="w-5 h-5 animate-spin mx-auto text-ios-blue" />
             </div>
           )}
         </div>
       </div>
 
-      {/* PIN Unlock Modal for Locked Game */}
-      {pinModalGame && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
-          <div className="bg-white dark:bg-ios-card-dark rounded-3xl p-5 border border-black/10 dark:border-white/10 shadow-2xl max-w-sm w-full space-y-4 animate-scaleUp">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-ios-blue/15 text-ios-blue flex items-center justify-center">
-                  <KeyRound className="w-4 h-4" />
-                </div>
-                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-50">
-                  Desbloquear Partida
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setPinModalGame(null);
-                  setPinInput('');
-                  setPinError(null);
-                }}
-                className="text-zinc-400 hover:text-zinc-600"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Introduce el PIN de <strong>"{pinModalGame.name}"</strong> para entrar y operar en este dispositivo:
-            </p>
-
-            <form onSubmit={handleUnlockAndEnter} className="space-y-3">
-              <input
-                type="password"
-                autoFocus
-                value={pinInput}
-                onChange={(e) => {
-                  setPinInput(e.target.value);
-                  setPinError(null);
-                }}
-                placeholder="Escribe el PIN..."
-                className="w-full px-3.5 py-2.5 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-center font-mono text-base tracking-widest text-zinc-900 dark:text-zinc-50 border border-black/5 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-ios-blue"
-              />
-
-              {pinError && (
-                <div className="p-2 bg-red-500/10 text-ios-red text-xs rounded-xl flex items-center gap-1.5 font-medium">
-                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                  <span>{pinError}</span>
-                </div>
-              )}
-
-              <div className="flex gap-2 pt-1">
-                <button
-                  type="submit"
-                  disabled={!pinInput.trim()}
-                  className="flex-1 py-3 rounded-2xl bg-ios-blue text-white font-bold text-xs shadow-md ios-active disabled:opacity-50"
-                >
-                  Desbloquear y Entrar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPinModalGame(null);
-                    setPinInput('');
-                    setPinError(null);
-                  }}
-                  className="px-4 py-3 rounded-2xl bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-semibold ios-active"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {joinSheet && (
+        <JoinGameSheet
+          initialCode={joinSheet.code}
+          gameName={joinSheet.name}
+          knownHasPin={joinSheet.hasPin}
+          message={joinSheet.message}
+          onClose={() => setJoinSheet(null)}
+        />
       )}
     </div>
   );

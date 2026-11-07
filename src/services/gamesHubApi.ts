@@ -1,260 +1,318 @@
 import { GameSaveData, GameSummary } from '../types/market';
-import {
-  isCloudConnected,
-  fetchGamesFromSupabase,
-  fetchGameDataFromSupabase,
-  saveGameToSupabase,
-  deleteGameFromSupabase,
-} from './supabaseService';
+import { sanitizeEquityHistory, sanitizePosition, sanitizeTrade } from '../lib/portfolio';
+import { fetchGame, fetchGameSummaries, gamesRpc, RpcResult } from './supabaseService';
 
-const REGISTRY_KEY = 'apex_games_registry_v8';
-const LOCAL_GAMES_PREFIX = 'apex_game_save_v8_';
+// Claves de localStorage (prefijo apex_ heredado; no cambiar los sufijos existentes)
+const REGISTRY_KEY = 'apex_games_registry_v8'; // resúmenes de mis partidas (caché)
+const LOCAL_GAMES_PREFIX = 'apex_game_save_v8_'; // partida completa (caché)
+const JOINED_KEY = 'apex_joined_games_v1'; // ids de partidas a las que me he unido en este dispositivo
+const TOKENS_KEY = 'apex_game_tokens_v1'; // tokens de dispositivo de partidas con PIN
+const PENDING_KEY = 'apex_pending_sync_v1'; // partidas con cambios sin subir
 
-// Unique 6-character game code generator
+export const DEFAULT_INITIAL_CASH = 10000;
+export const GAME_ID_RE = /^[A-Z0-9]{6}$/;
+export const PIN_RE = /^[0-9]{4,8}$/;
+
+function readJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) return JSON.parse(raw) as T;
+  } catch {}
+  return fallback;
+}
+
+function writeJson(key: string, value: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {}
+}
+
+export function normalizeGameId(id: string): string {
+  return id.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
 export function generateGameId(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let id = '';
-  for (let i = 0; i < 6; i++) {
-    id += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return id;
+  const bytes = new Uint8Array(6);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => chars[b % chars.length]).join('');
 }
 
-// Synchronous fetch of local games registry
-export function getAllGamesSync(): GameSummary[] {
+// ---------------------------------------------------------------------
+// Partidas unidas en este dispositivo
+// ---------------------------------------------------------------------
+
+export function getJoinedIds(): string[] {
+  const joined = readJson<string[] | null>(JOINED_KEY, null);
+  if (joined) return joined;
+  // Primera vez con la versión nueva: heredar las partidas que había en caché
+  const legacy = readJson<GameSummary[]>(REGISTRY_KEY, []).map((g) => g.id).filter(Boolean);
+  writeJson(JOINED_KEY, legacy);
+  return legacy;
+}
+
+function setJoinedIds(ids: string[]) {
+  writeJson(JOINED_KEY, Array.from(new Set(ids)));
+}
+
+export function addJoined(id: string) {
+  setJoinedIds([id, ...getJoinedIds().filter((g) => g !== id)]);
+}
+
+export function getToken(id: string): string | null {
+  return readJson<Record<string, string>>(TOKENS_KEY, {})[id] ?? null;
+}
+
+function setToken(id: string, token: string | null | undefined) {
+  const tokens = readJson<Record<string, string>>(TOKENS_KEY, {});
+  if (token) tokens[id] = token;
+  else delete tokens[id];
+  writeJson(TOKENS_KEY, tokens);
+}
+
+function setPending(id: string, pending: boolean) {
+  const map = readJson<Record<string, boolean>>(PENDING_KEY, {});
+  if (pending) map[id] = true;
+  else delete map[id];
+  writeJson(PENDING_KEY, map);
+}
+
+export function hasPendingSync(id: string): boolean {
+  return !!readJson<Record<string, boolean>>(PENDING_KEY, {})[id];
+}
+
+/** Quita la partida de este dispositivo (no la borra de la nube). */
+export function forgetGame(id: string) {
+  setJoinedIds(getJoinedIds().filter((g) => g !== id));
+  setToken(id, null);
+  setPending(id, false);
   try {
-    const local = localStorage.getItem(REGISTRY_KEY);
-    if (local) {
-      const parsed: GameSummary[] = JSON.parse(local);
-      if (Array.isArray(parsed)) {
-        return parsed.sort((a, b) => (b.createdAt || b.updatedAt) - (a.createdAt || a.updatedAt));
-      }
-    }
+    localStorage.removeItem(`${LOCAL_GAMES_PREFIX}${id}`);
   } catch {}
-  return [];
-}
-
-// Fetch all games (Supabase Cloud is the source of truth when connected)
-export async function fetchAllGames(): Promise<GameSummary[]> {
-  if (isCloudConnected()) {
-    try {
-      const cloudGames = await fetchGamesFromSupabase();
-      if (cloudGames !== null) {
-        try {
-          localStorage.setItem(REGISTRY_KEY, JSON.stringify(cloudGames));
-        } catch {}
-        return cloudGames;
-      }
-    } catch {}
-  }
-
-  return getAllGamesSync();
-}
-
-// Synchronous fetch of single game data from local storage
-export function getSavedGameSync(gameId: string): GameSaveData | null {
-  const cleanId = gameId.trim().toUpperCase();
-  try {
-    const local = localStorage.getItem(`${LOCAL_GAMES_PREFIX}${cleanId}`);
-    if (local) {
-      const parsed = JSON.parse(local);
-      if (parsed && parsed.id) return parsed;
-    }
-  } catch {}
-  return null;
-}
-
-const UNLOCKED_GAMES_KEY = 'stock_unlocked_games_v1';
-
-export function getUnlockedGames(): Record<string, boolean> {
-  try {
-    const saved = localStorage.getItem(UNLOCKED_GAMES_KEY);
-    if (saved) return JSON.parse(saved);
-  } catch {}
-  return {};
-}
-
-export function markGameUnlockedLocally(gameId: string): void {
-  try {
-    const cleanId = gameId.trim().toUpperCase();
-    const current = getUnlockedGames();
-    current[cleanId] = true;
-    localStorage.setItem(UNLOCKED_GAMES_KEY, JSON.stringify(current));
-  } catch {}
-}
-
-export function isGameUnlocked(game: { id: string; isPrivate?: boolean; pinCode?: string }): boolean {
-  if (!game.isPrivate) return true;
-  if (!game.pinCode) return true;
-  const cleanId = game.id.trim().toUpperCase();
-  const unlocked = getUnlockedGames();
-  return !!unlocked[cleanId];
-}
-
-export function unlockGame(game: { id: string; isPrivate?: boolean; pinCode?: string }, enteredPin: string): boolean {
-  if (!game.isPrivate) return true;
-  const actualPin = (game.pinCode || '').trim();
-  const inputPin = enteredPin.trim();
-  if (!actualPin || actualPin === inputPin) {
-    markGameUnlockedLocally(game.id);
-    return true;
-  }
-  return false;
-}
-
-// Synchronous local persistence + awaited Supabase cloud sync
-export async function syncGameToCloudAndLocal(game: GameSaveData): Promise<boolean> {
-  if (!game || !game.id) return false;
-
-  const summary: GameSummary = {
-    id: game.id,
-    name: game.name,
-    createdAt: game.createdAt || Date.now(),
-    updatedAt: Date.now(),
-    initialCash: game.initialCash,
-    cashAvailable: game.cashAvailable,
-    cashInvested: game.cashInvested,
-    totalNetWorth: game.totalNetWorth,
-    totalPnL: game.totalPnL,
-    totalPnLPercent: game.totalPnLPercent,
-    positionsCount: game.positions ? game.positions.length : 0,
-    isPrivate: game.isPrivate ?? true,
-    pinCode: game.pinCode,
-  };
-
-  const fullData: GameSaveData = {
-    ...game,
-    isPrivate: summary.isPrivate,
-    pinCode: summary.pinCode,
-    updatedAt: summary.updatedAt,
-  };
-
-  // 1. Instant local persistence (Synchronous 0ms)
-  try {
-    localStorage.setItem(`${LOCAL_GAMES_PREFIX}${game.id}`, JSON.stringify(fullData));
-  } catch (e) {
-    console.warn('LocalStorage save warning:', e);
-  }
-
-  // 2. Update local registry
-  const localRegistry = getAllGamesSync();
-  const updatedRegistry = [
-    summary,
-    ...localRegistry.filter((g) => g.id !== game.id),
-  ].sort((a, b) => (b.createdAt || b.updatedAt) - (a.createdAt || a.updatedAt));
-
-  try {
-    localStorage.setItem(REGISTRY_KEY, JSON.stringify(updatedRegistry));
-  } catch {}
-
-  // 3. Cloud Sync (if Supabase is connected)
-  if (isCloudConnected()) {
-    try {
-      await saveGameToSupabase(fullData);
-    } catch {}
-  }
-
-  return true;
-}
-
-// Rename a game with immediate local & cloud update
-export async function renameGameById(gameId: string, newName: string): Promise<boolean> {
-  const cleanId = gameId.trim().toUpperCase();
-  const cleanName = newName.trim();
-  if (!cleanName) return false;
-
-  const existing = await loadGameData(cleanId);
-  if (existing) {
-    existing.name = cleanName;
-    existing.updatedAt = Date.now();
-    await syncGameToCloudAndLocal(existing);
-    return true;
-  }
-
-  const localRegistry = getAllGamesSync();
-  const updated = localRegistry.map((g) =>
-    g.id === cleanId ? { ...g, name: cleanName, updatedAt: Date.now() } : g
+  writeJson(
+    REGISTRY_KEY,
+    getCachedSummaries().filter((g) => g.id !== id)
   );
-  try {
-    localStorage.setItem(REGISTRY_KEY, JSON.stringify(updated));
-  } catch {}
-
-  return true;
 }
 
-// Update a game PIN with immediate local & cloud update
-export async function updateGamePinById(gameId: string, newPin: string, isPrivate: boolean = true): Promise<boolean> {
-  const cleanId = gameId.trim().toUpperCase();
-  const cleanPin = newPin.trim();
+// ---------------------------------------------------------------------
+// Caché local
+// ---------------------------------------------------------------------
 
-  const existing = await loadGameData(cleanId);
-  if (existing) {
-    existing.pinCode = cleanPin;
-    existing.isPrivate = isPrivate;
-    existing.updatedAt = Date.now();
-    await syncGameToCloudAndLocal(existing);
-    return true;
-  }
-
-  return false;
+export function getCachedSummaries(): GameSummary[] {
+  const joined = new Set(getJoinedIds());
+  return readJson<GameSummary[]>(REGISTRY_KEY, []).filter((g) => g && joined.has(g.id));
 }
 
-// Set a game Privacy (Public vs Private) with immediate local & cloud update
-export async function setGamePrivacyById(gameId: string, isPrivate: boolean, pinCode?: string): Promise<boolean> {
-  const cleanId = gameId.trim().toUpperCase();
-  const existing = await loadGameData(cleanId);
-  if (existing) {
-    existing.isPrivate = isPrivate;
-    existing.pinCode = isPrivate ? (pinCode || existing.pinCode || '1234') : undefined;
-    existing.updatedAt = Date.now();
-    await syncGameToCloudAndLocal(existing);
-    return true;
-  }
-  return false;
+export function getCachedGame(id: string): GameSaveData | null {
+  const raw = readJson<any>(`${LOCAL_GAMES_PREFIX}${id}`, null);
+  if (!raw || !raw.id) return null;
+  const createdAt = Number(raw.createdAt) || Date.now();
+  const initialCash = Number(raw.initialCash) || DEFAULT_INITIAL_CASH;
+  return {
+    id: raw.id,
+    name: raw.name || `Partida ${raw.id}`,
+    createdAt,
+    updatedAt: Number(raw.updatedAt) || createdAt,
+    initialCash,
+    cashAvailable: Number(raw.cashAvailable) || 0,
+    cashInvested: Number(raw.cashInvested) || 0,
+    totalNetWorth: Number(raw.totalNetWorth) || initialCash,
+    totalPnL: Number(raw.totalPnL) || 0,
+    totalPnLPercent: Number(raw.totalPnLPercent) || 0,
+    positionsCount: Number(raw.positionsCount) || 0,
+    hasPin: !!(raw.hasPin ?? raw.isPrivate),
+    positions: (raw.positions || []).map(sanitizePosition).filter(Boolean),
+    tradeHistory: (raw.tradeHistory || []).map(sanitizeTrade).filter(Boolean),
+    watchlist: (raw.watchlist || []).filter((s: unknown) => typeof s === 'string' && !String(s).startsWith('__SEC:')),
+    equityHistory: sanitizeEquityHistory(raw.equityHistory, createdAt, initialCash),
+  };
 }
 
-// Load a specific game's full data (Cloud source of truth when connected)
-export async function loadGameData(gameId: string): Promise<GameSaveData | null> {
-  const cleanId = gameId.trim().toUpperCase();
-  const local = getSavedGameSync(cleanId);
-
-  // If cloud is connected, always fetch the freshest data from Supabase
-  if (isCloudConnected()) {
-    try {
-      const cloudData = await fetchGameDataFromSupabase(cleanId);
-      if (cloudData) {
-        if (!local || (cloudData.updatedAt || 0) >= (local.updatedAt || 0)) {
-          try {
-            localStorage.setItem(`${LOCAL_GAMES_PREFIX}${cleanId}`, JSON.stringify(cloudData));
-          } catch {}
-          return cloudData;
-        }
-      }
-    } catch {}
-  }
-
-  // Fallback to local cache if offline or local is newer
-  return local;
+function cacheGame(game: GameSaveData) {
+  writeJson(`${LOCAL_GAMES_PREFIX}${game.id}`, game);
+  const { positions, tradeHistory, watchlist, equityHistory, ...summary } = game;
+  writeJson(REGISTRY_KEY, [summary, ...readJson<GameSummary[]>(REGISTRY_KEY, []).filter((g) => g.id !== game.id)]);
 }
 
-// Delete a game permanently from local storage and Supabase
-export async function deleteGameById(gameId: string): Promise<boolean> {
-  const cleanId = gameId.trim().toUpperCase();
+// ---------------------------------------------------------------------
+// Operaciones
+// ---------------------------------------------------------------------
 
-  // 1. Remove from local storage immediately
-  try {
-    localStorage.removeItem(`${LOCAL_GAMES_PREFIX}${cleanId}`);
-    const registry = getAllGamesSync();
-    const updatedRegistry = registry.filter((g) => g.id !== cleanId);
-    localStorage.setItem(REGISTRY_KEY, JSON.stringify(updatedRegistry));
-  } catch {}
+/** Mis partidas (las unidas en este dispositivo) con datos frescos de la nube. */
+export async function fetchMyGames(): Promise<GameSummary[]> {
+  const ids = getJoinedIds();
+  const cloud = await fetchGameSummaries(ids);
+  if (!cloud) return getCachedSummaries();
 
-  // 2. Remove from Supabase
-  if (isCloudConnected()) {
-    try {
-      await deleteGameFromSupabase(cleanId);
-    } catch {}
+  // Las partidas que ya no existen en la nube se olvidan (salvo cambios pendientes de subir)
+  const found = new Set(cloud.map((g) => g.id));
+  ids.filter((id) => !found.has(id) && !hasPendingSync(id)).forEach(forgetGame);
+
+  const cachedById = new Map(readJson<GameSummary[]>(REGISTRY_KEY, []).map((g) => [g.id, g]));
+  cloud.forEach((g) => cachedById.set(g.id, g));
+  writeJson(REGISTRY_KEY, Array.from(cachedById.values()));
+
+  const order = new Map(getJoinedIds().map((id, i) => [id, i]));
+  return getCachedSummaries().sort((a, b) => (order.get(a.id) ?? 99) - (order.get(b.id) ?? 99));
+}
+
+export async function fetchRanking(): Promise<GameSummary[] | null> {
+  return fetchGameSummaries();
+}
+
+export type LoadGameResult =
+  | { status: 'ok'; game: GameSaveData; fromCache: boolean }
+  | { status: 'not_found' }
+  | { status: 'needs_pin'; summary: GameSummary }
+  | { status: 'offline' };
+
+/** Carga una partida de la nube (o de la caché si no hay conexión). */
+export async function loadGame(id: string): Promise<LoadGameResult> {
+  const remote = await fetchGame(id);
+  const cached = getCachedGame(id);
+
+  if (remote.status === 'not_found') return hasPendingSync(id) && cached ? { status: 'ok', game: cached, fromCache: true } : { status: 'not_found' };
+  if (remote.status === 'offline') return cached ? { status: 'ok', game: cached, fromCache: true } : { status: 'offline' };
+
+  const game = remote.game;
+  if (game.hasPin && !getToken(id)) {
+    const { positions, tradeHistory, watchlist, equityHistory, ...summary } = game;
+    return { status: 'needs_pin', summary };
   }
 
-  return true;
+  // Si hay cambios locales sin subir más recientes que la nube, mandan los locales
+  if (cached && hasPendingSync(id) && cached.updatedAt > game.updatedAt) {
+    return { status: 'ok', game: { ...cached, hasPin: game.hasPin }, fromCache: true };
+  }
+  cacheGame(game);
+  return { status: 'ok', game, fromCache: false };
+}
+
+export interface GameOpResult {
+  ok: boolean;
+  game?: GameSaveData;
+  updatedAt?: number;
+  error?: string;
+  needsPin?: boolean;
+}
+
+export function describeGameError(r: RpcResult | { error?: string; retry_after?: number; attempts_left?: number }): string {
+  switch (r.error) {
+    case 'INVALID_PIN':
+      return r.attempts_left !== undefined && r.attempts_left <= 3
+        ? `PIN incorrecto. Te quedan ${r.attempts_left} intento(s) antes del bloqueo temporal.`
+        : 'PIN incorrecto. El PIN tiene entre 4 y 8 dígitos.';
+    case 'LOCKED': {
+      const min = Math.max(1, Math.ceil((r.retry_after || 60) / 60));
+      return `Demasiados intentos fallidos. Vuelve a intentarlo en ${min} min.`;
+    }
+    case 'NOT_FOUND':
+      return 'No existe ninguna partida con ese código.';
+    case 'UNAUTHORIZED':
+      return 'Esta partida está protegida con PIN. Vuelve a introducirlo.';
+    case 'INVALID_CASH':
+      return 'El capital inicial no es válido.';
+    case 'INVALID_ID':
+      return 'El código de partida no es válido.';
+    case 'TOO_LARGE':
+      return 'La partida es demasiado grande para guardarse.';
+    case 'MIGRATION_MISSING':
+      return 'Falta actualizar la base de datos (migración SQL pendiente).';
+    case 'NETWORK':
+      return 'Sin conexión. Inténtalo de nuevo.';
+    default:
+      return 'No se ha podido completar la operación. Inténtalo de nuevo.';
+  }
+}
+
+export async function createGame(name: string, initialCash: number, pin?: string): Promise<GameOpResult> {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const id = generateGameId();
+    const res = await gamesRpc.create(id, name, initialCash, pin);
+    if (!res.ok && res.error === 'ID_TAKEN') continue;
+    if (!res.ok) return { ok: false, error: describeGameError(res) };
+
+    setToken(id, res.token);
+    addJoined(id);
+    const now = res.updated_at || Date.now();
+    const game: GameSaveData = {
+      id,
+      name: name.trim().slice(0, 40) || `Partida ${id}`,
+      createdAt: now,
+      updatedAt: now,
+      initialCash,
+      cashAvailable: initialCash,
+      cashInvested: 0,
+      totalNetWorth: initialCash,
+      totalPnL: 0,
+      totalPnLPercent: 0,
+      positionsCount: 0,
+      hasPin: !!pin,
+      positions: [],
+      tradeHistory: [],
+      watchlist: [],
+      equityHistory: [{ t: now, v: initialCash }],
+    };
+    cacheGame(game);
+    return { ok: true, game };
+  }
+  return { ok: false, error: 'No se ha podido generar un código libre. Inténtalo de nuevo.' };
+}
+
+/** Unirse a una partida por código (y PIN si lo tiene). */
+export async function joinGame(rawId: string, pin?: string): Promise<GameOpResult> {
+  const id = normalizeGameId(rawId);
+  if (!GAME_ID_RE.test(id)) return { ok: false, error: 'El código tiene 6 caracteres (letras y números).' };
+
+  const summaries = await fetchGameSummaries([id]);
+  if (!summaries) return { ok: false, error: describeGameError({ error: 'NETWORK' }) };
+  const summary = summaries[0];
+  if (!summary) return { ok: false, error: describeGameError({ error: 'NOT_FOUND' }) };
+
+  if (summary.hasPin && !getToken(id)) {
+    if (!pin) return { ok: false, error: 'Esta partida tiene PIN.', needsPin: true };
+    const res = await gamesRpc.unlock(id, pin.trim());
+    if (!res.ok) return { ok: false, error: describeGameError(res), needsPin: true };
+    setToken(id, res.token);
+  }
+
+  addJoined(id);
+  const loaded = await loadGame(id);
+  if (loaded.status === 'ok') return { ok: true, game: loaded.game };
+  if (loaded.status === 'needs_pin') return { ok: false, error: 'Esta partida tiene PIN.', needsPin: true };
+  return { ok: false, error: describeGameError({ error: loaded.status === 'not_found' ? 'NOT_FOUND' : 'NETWORK' }) };
+}
+
+/** Guarda en local al instante y sube a la nube. */
+export async function saveGame(game: GameSaveData): Promise<GameOpResult> {
+  cacheGame(game);
+  setPending(game.id, true);
+  const res = await gamesRpc.save(game, getToken(game.id));
+  if (res.ok) {
+    setPending(game.id, false);
+    return { ok: true, updatedAt: res.updated_at };
+  }
+  if (res.error === 'UNAUTHORIZED') {
+    setToken(game.id, null);
+    setPending(game.id, false);
+    return { ok: false, error: describeGameError(res), needsPin: true };
+  }
+  if (res.error === 'NOT_FOUND') setPending(game.id, false);
+  return { ok: false, error: res.error || 'SERVER' };
+}
+
+export async function setGamePin(id: string, newPin: string | null): Promise<GameOpResult> {
+  if (newPin && !PIN_RE.test(newPin)) return { ok: false, error: 'El PIN debe tener entre 4 y 8 dígitos.' };
+  const res = await gamesRpc.setPin(id, getToken(id), newPin);
+  if (!res.ok) return { ok: false, error: describeGameError(res), needsPin: res.error === 'UNAUTHORIZED' };
+  setToken(id, res.token);
+  return { ok: true, updatedAt: res.updated_at };
+}
+
+export async function deleteGame(id: string): Promise<GameOpResult> {
+  const res = await gamesRpc.remove(id, getToken(id));
+  if (!res.ok) return { ok: false, error: describeGameError(res) };
+  forgetGame(id);
+  return { ok: true };
 }

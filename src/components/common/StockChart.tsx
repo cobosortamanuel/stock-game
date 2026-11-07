@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { ChartPoint, TimeRange, Position } from '../../types/market';
-import { formatCurrency, formatPercent } from '../../services/marketApi';
+import { formatCurrency, formatPercent, RANGE_LABELS } from '../../services/marketApi';
 
 interface StockChartProps {
   data: ChartPoint[];
@@ -11,6 +11,12 @@ interface StockChartProps {
   height?: number;
   showTimeSelector?: boolean;
   positions?: Position[];
+  /** Divisa de los precios de la gráfica */
+  currency?: string;
+  /** Rangos seleccionables */
+  ranges?: TimeRange[];
+  /** Texto bajo el precio cuando no se está arrastrando */
+  periodLabel?: string;
 }
 
 export const StockChart: React.FC<StockChartProps> = ({
@@ -22,15 +28,19 @@ export const StockChart: React.FC<StockChartProps> = ({
   height = 230,
   showTimeSelector = true,
   positions = [],
+  currency = 'USD',
+  ranges = ['1H', '1D', '1W', '1M', '1Y', '5Y', 'ALL'],
+  periodLabel,
 }) => {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const points = data && data.length > 0 ? data : [];
+  const points = useMemo(() => (data && data.length > 0 ? data : []), [data]);
 
   // Determine min and max for scaling
-  const { minPrice, maxPrice, priceRange, isTrendUp } = useMemo(() => {
-    if (points.length === 0) return { minPrice: 0, maxPrice: 100, priceRange: 100, isTrendUp: true };
+  const { minPrice, priceRange, isTrendUp, dataMin, dataMax } = useMemo(() => {
+    if (points.length === 0) return { minPrice: 0, priceRange: 100, isTrendUp: true, dataMin: 0, dataMax: 0 };
+    const dataPrices = points.map((p) => p.price);
     const prices = points.map((p) => p.price);
     
     // Include entry prices with mild margin so guidelines are always visible
@@ -44,11 +54,11 @@ export const StockChart: React.FC<StockChartProps> = ({
     const min = rawMin - padding;
     const max = rawMax + padding;
     const range = max - min === 0 ? 1 : max - min;
-    const firstPrice = points[0].price;
+    const firstPrice = basePrice ?? points[0].price;
     const lastPrice = points[points.length - 1].price;
     const up = lastPrice >= firstPrice;
-    return { minPrice: min, maxPrice: max, priceRange: range, isTrendUp: up };
-  }, [points, positions]);
+    return { minPrice: min, priceRange: range, isTrendUp: up, dataMin: Math.min(...dataPrices), dataMax: Math.max(...dataPrices) };
+  }, [points, positions, basePrice]);
 
   // SVG coordinate dimensions
   const svgWidth = 600;
@@ -60,7 +70,7 @@ export const StockChart: React.FC<StockChartProps> = ({
 
   // Active point when scrubbing
   const activePoint = hoverIndex !== null && points[hoverIndex] ? points[hoverIndex] : (points.length > 0 ? points[points.length - 1] : null);
-  const startPrice = points.length > 0 ? points[0].price : 0;
+  const startPrice = basePrice ?? (points.length > 0 ? points[0].price : 0);
   const activeDelta = activePoint ? activePoint.price - startPrice : 0;
   const activeDeltaPercent = startPrice > 0 && activePoint ? (activeDelta / startPrice) * 100 : 0;
   const activeIsUp = activeDelta >= 0;
@@ -80,7 +90,7 @@ export const StockChart: React.FC<StockChartProps> = ({
       const y = svgHeight - paddingY - normalizedY * usableHeight;
       return { x, y, point: p, index: i };
     });
-  }, [points, minPrice, priceRange, svgHeight, usableHeight, usableWidth]);
+  }, [points, minPrice, priceRange, svgHeight, usableHeight]);
 
   // Map Position Entry Guidelines
   const entryGuidelines = useMemo(() => {
@@ -103,7 +113,7 @@ export const StockChart: React.FC<StockChartProps> = ({
         isProfitable,
       };
     });
-  }, [points, positions, minPrice, priceRange, svgHeight, usableHeight, usableWidth, activePoint]);
+  }, [points, positions, minPrice, priceRange, svgHeight, usableHeight, activePoint]);
 
   // Construct authentic financial SVG path
   const { linePath, areaPath } = useMemo(() => {
@@ -138,7 +148,6 @@ export const StockChart: React.FC<StockChartProps> = ({
   const trendColor = isTrendUp ? '#34C759' : '#FF3B30';
   const trendGradientId = `grad_${isTrendUp ? 'green' : 'red'}`;
 
-  const timeRanges: TimeRange[] = ['1H', '1D', '1W', '1M', '1Y', '5Y', 'ALL'];
 
   return (
     <div className="w-full flex flex-col select-none">
@@ -146,18 +155,18 @@ export const StockChart: React.FC<StockChartProps> = ({
       <div className="flex items-baseline justify-between mb-2 px-1">
         <div>
           <div className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 font-mono">
-            {activePoint ? formatCurrency(activePoint.price) : '$0.00'}
+            {activePoint ? formatCurrency(activePoint.price, currency) : '—'}
           </div>
           <div className="flex items-center gap-2 mt-0.5 text-xs font-semibold">
             <span className={activeIsUp ? 'text-ios-green' : 'text-ios-red'}>
-              {activeIsUp ? '+' : ''}{formatCurrency(activeDelta)} ({formatPercent(activeDeltaPercent)})
+              {activeIsUp ? '+' : ''}{formatCurrency(activeDelta, currency)} ({formatPercent(activeDeltaPercent)})
             </span>
             <span className="text-zinc-400 font-normal">
-              {hoverIndex !== null ? activePoint?.dateStr : `en ${timeRange}`}
+              {hoverIndex !== null ? activePoint?.dateStr : periodLabel ?? `en ${RANGE_LABELS[timeRange]}`}
             </span>
             {scrubbedPosition && (
               <span className="px-2 py-0.5 rounded-md bg-zinc-800 text-white font-mono text-[10px] border border-white/10">
-                Tu Entrada: {scrubbedPosition.type === 'LONG' ? 'Largo' : 'Corto'} @ {formatCurrency(scrubbedPosition.entryPrice)}
+                Tu entrada: {scrubbedPosition.type === 'LONG' ? 'Largo' : 'Corto'} @ {formatCurrency(scrubbedPosition.entryPrice, currency)}
               </span>
             )}
           </div>
@@ -165,8 +174,8 @@ export const StockChart: React.FC<StockChartProps> = ({
 
         {/* High / Low markers */}
         <div className="text-right text-[11px] text-zinc-400 hidden sm:block">
-          <div>Máx: <span className="font-mono text-zinc-600 dark:text-zinc-300">{formatCurrency(maxPrice)}</span></div>
-          <div>Mín: <span className="font-mono text-zinc-600 dark:text-zinc-300">{formatCurrency(minPrice)}</span></div>
+          <div>Máx: <span className="font-mono text-zinc-600 dark:text-zinc-300">{formatCurrency(dataMax, currency)}</span></div>
+          <div>Mín: <span className="font-mono text-zinc-600 dark:text-zinc-300">{formatCurrency(dataMin, currency)}</span></div>
         </div>
       </div>
 
@@ -265,7 +274,7 @@ export const StockChart: React.FC<StockChartProps> = ({
                 }`}
               >
                 <span>{guide.isLong ? '▲ LARGO' : '▼ CORTO'}</span>
-                <span>{formatCurrency(guide.pos.entryPrice)}</span>
+                <span>{formatCurrency(guide.pos.entryPrice, currency)}</span>
               </div>
             </div>
           );
@@ -286,8 +295,11 @@ export const StockChart: React.FC<StockChartProps> = ({
 
       {/* iOS Timeframe Segmented Switcher */}
       {showTimeSelector && onTimeRangeChange && (
-        <div className="mt-3 grid grid-cols-7 gap-1 bg-zinc-100 dark:bg-zinc-900/90 p-1 rounded-xl border border-black/5 dark:border-white/5">
-          {timeRanges.map((range) => {
+        <div
+          className="mt-3 grid gap-1 bg-zinc-100 dark:bg-zinc-900/90 p-1 rounded-xl border border-black/5 dark:border-white/5"
+          style={{ gridTemplateColumns: `repeat(${ranges.length}, minmax(0, 1fr))` }}
+        >
+          {ranges.map((range) => {
             const isSelected = range === timeRange;
             return (
               <button
@@ -300,7 +312,7 @@ export const StockChart: React.FC<StockChartProps> = ({
                     : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200'
                 }`}
               >
-                {range}
+                {RANGE_LABELS[range]}
               </button>
             );
           })}

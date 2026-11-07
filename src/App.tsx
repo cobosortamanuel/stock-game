@@ -22,7 +22,7 @@ function ViewFallback() {
 }
 
 function AppContent() {
-  const { positions, isLobbyOpen, closeLobby } = useTrading();
+  const { positions, isLobbyOpen } = useTrading();
   const [activeTab, setActiveTab] = useState<TabType>('portfolio');
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
@@ -41,7 +41,7 @@ function AppContent() {
       case 'history':
         return 'Historial';
       case 'ranking':
-        return 'Ranking Global';
+        return 'Ranking';
       case 'settings':
         return 'Ajustes';
       default:
@@ -118,7 +118,7 @@ function AppContent() {
           />
         )}
 
-        {isLobbyOpen && <GamesLobbyView onClose={closeLobby} />}
+        {isLobbyOpen && <GamesLobbyView />}
       </Suspense>
     </div>
   );

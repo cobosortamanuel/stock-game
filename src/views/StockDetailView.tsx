@@ -5,6 +5,7 @@ import { fetchStockData, formatCurrency, formatPercent } from '../services/marke
 import { StockChart } from '../components/common/StockChart';
 import { TradeModal } from '../components/common/TradeModal';
 import { useTrading } from '../context/TradingContext';
+import { MarketStatusBadge } from '../components/common/MarketStatusBadge';
 
 interface StockDetailViewProps {
   symbol: string;
@@ -15,7 +16,9 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
   symbol,
   onBack,
 }) => {
-  const { watchlist, toggleWatchlist, positions, closePosition } = useTrading();
+  const { watchlist, toggleWatchlist, positions, closePosition, mergeQuote } = useTrading();
+  const [confirmCloseId, setConfirmCloseId] = useState<string | null>(null);
+  const [closeMessage, setCloseMessage] = useState<{ success: boolean; message: string } | null>(null);
   const [timeRange, setTimeRange] = useState<TimeRange>('1D');
   const [quote, setQuote] = useState<StockQuote | null>(null);
   const [chartData, setChartData] = useState<ChartPoint[]>([]);
@@ -35,6 +38,7 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
       if (res && res.quote) {
         setQuote(res.quote);
         setChartData(res.chart);
+        mergeQuote(res.quote);
         setHasError(false);
       } else {
         setQuote(null);
@@ -46,7 +50,7 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
     } finally {
       setIsLoading(false);
     }
-  }, [symbol, timeRange]);
+  }, [symbol, timeRange, mergeQuote]);
 
   useEffect(() => {
     loadData();
@@ -91,12 +95,13 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
             {symbol}
           </h1>
           <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-200/80 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-semibold">
-            {quote?.exchange || 'NASDAQ'}
+            {quote?.exchange || '…'}
           </span>
         </div>
         <p className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">
-          {quote?.name || `${symbol} Corporation`}
+          {quote?.name || (isLoading ? 'Cargando…' : symbol)}
         </p>
+        <div className="mt-1">{quote && <MarketStatusBadge quote={quote} />}</div>
       </div>
 
       {/* Interactive Chart Section or Error */}
@@ -147,6 +152,8 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
               height={230}
               showTimeSelector={true}
               positions={userPositions}
+              currency={quote?.currency}
+              basePrice={timeRange === '1D' && quote ? quote.prevClose : undefined}
             />
           )}
         </div>
@@ -157,9 +164,15 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
         <div className="mt-4 space-y-3">
           <div className="flex items-center justify-between px-1">
             <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">
-              Tus Apuestas en {symbol} ({userPositions.length})
+              Tus posiciones en {symbol} ({userPositions.length})
             </span>
           </div>
+
+          {closeMessage && (
+            <div className={`p-3 rounded-xl text-xs font-medium ${closeMessage.success ? 'bg-ios-green/15 text-ios-green' : 'bg-ios-red/15 text-ios-red'}`}>
+              {closeMessage.message}
+            </div>
+          )}
 
           {userPositions.map((pos) => {
             const isLong = pos.type === 'LONG';
@@ -216,22 +229,22 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
                       Entrada
                     </span>
                     <span className="font-mono font-bold text-zinc-900 dark:text-zinc-100">
-                      {formatCurrency(pos.entryPrice)}
+                      {formatCurrency(pos.entryPrice, pos.currency)}
                     </span>
                   </div>
 
                   <div className="p-2.5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50">
                     <span className="text-[10px] text-zinc-400 uppercase font-medium block">
-                      Precio Actual
+                      Precio actual
                     </span>
                     <span className="font-mono font-bold text-zinc-900 dark:text-zinc-100">
-                      {formatCurrency(pos.currentPrice)}
+                      {pos.hasPrice ? formatCurrency(pos.currentPrice, pos.currency) : '—'}
                     </span>
                   </div>
 
                   <div className="p-2.5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50">
                     <span className="text-[10px] text-zinc-400 uppercase font-medium block">
-                      Dinero Apostado
+                      Invertido
                     </span>
                     <span className="font-mono font-bold text-zinc-900 dark:text-zinc-100">
                       {formatCurrency(pos.investedAmount)}
@@ -240,7 +253,7 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
 
                   <div className="p-2.5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50">
                     <span className="text-[10px] text-zinc-400 uppercase font-medium block">
-                      Valor Actual ({pos.shares.toFixed(3)} acc)
+                      Valor actual ({pos.shares.toFixed(4)} acc.)
                     </span>
                     <span className="font-mono font-bold text-zinc-900 dark:text-zinc-100">
                       {formatCurrency(pos.currentValue)}
@@ -248,14 +261,40 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
                   </div>
                 </div>
 
-                {/* Close Position Action Button */}
-                <button
-                  type="button"
-                  onClick={() => closePosition(pos.id)}
-                  className="w-full py-2.5 rounded-2xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-bold transition-all ios-active flex items-center justify-center gap-1.5"
-                >
-                  <span>Cerrar esta Posición (Cobrar {formatCurrency(pos.currentValue)})</span>
-                </button>
+                {/* Cerrar posición (con confirmación) */}
+                {confirmCloseId === pos.id ? (
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCloseMessage(closePosition(pos.id));
+                        setConfirmCloseId(null);
+                      }}
+                      className="flex-1 py-2.5 rounded-2xl bg-ios-red text-white text-xs font-bold ios-active"
+                    >
+                      Confirmar: recibir {formatCurrency(pos.currentValue)}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmCloseId(null)}
+                      className="px-4 py-2.5 rounded-2xl bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-semibold ios-active"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCloseMessage(null);
+                      setConfirmCloseId(pos.id);
+                    }}
+                    disabled={!pos.hasPrice}
+                    className="w-full py-2.5 rounded-2xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-bold transition-all ios-active disabled:opacity-50"
+                  >
+                    Cerrar esta posición
+                  </button>
+                )}
               </div>
             );
           })}
@@ -266,49 +305,49 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
       {quote && (
         <div className="mt-4 bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-900 dark:to-zinc-950 rounded-3xl p-5 border border-black/5 dark:border-white/10 shadow-ios-sm">
           <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-3">
-            Estadísticas Clave del Mercado
+            Datos del mercado
           </h3>
 
           <div className="grid grid-cols-2 gap-y-3.5 gap-x-4 text-xs">
             <div className="flex items-center justify-between pb-2 border-b border-black/5 dark:border-white/5">
               <span className="text-zinc-500 dark:text-zinc-400">Apertura</span>
               <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
-                {quote.open ? formatCurrency(quote.open) : '-'}
+                {quote.open ? formatCurrency(quote.open, quote.currency) : '-'}
               </span>
             </div>
 
             <div className="flex items-center justify-between pb-2 border-b border-black/5 dark:border-white/5">
               <span className="text-zinc-500 dark:text-zinc-400">Cierre Previo</span>
               <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
-                {quote.prevClose ? formatCurrency(quote.prevClose) : '-'}
+                {quote.prevClose ? formatCurrency(quote.prevClose, quote.currency) : '-'}
               </span>
             </div>
 
             <div className="flex items-center justify-between pb-2 border-b border-black/5 dark:border-white/5">
               <span className="text-zinc-500 dark:text-zinc-400">Máx del Día</span>
               <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
-                {quote.high ? formatCurrency(quote.high) : '-'}
+                {quote.high ? formatCurrency(quote.high, quote.currency) : '-'}
               </span>
             </div>
 
             <div className="flex items-center justify-between pb-2 border-b border-black/5 dark:border-white/5">
               <span className="text-zinc-500 dark:text-zinc-400">Mín del Día</span>
               <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
-                {quote.low ? formatCurrency(quote.low) : '-'}
+                {quote.low ? formatCurrency(quote.low, quote.currency) : '-'}
               </span>
             </div>
 
             <div className="flex items-center justify-between pb-2 border-b border-black/5 dark:border-white/5">
               <span className="text-zinc-500 dark:text-zinc-400">Máx 52 Semanas</span>
               <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
-                {quote.week52High ? formatCurrency(quote.week52High) : '-'}
+                {quote.week52High ? formatCurrency(quote.week52High, quote.currency) : '-'}
               </span>
             </div>
 
             <div className="flex items-center justify-between pb-2 border-b border-black/5 dark:border-white/5">
               <span className="text-zinc-500 dark:text-zinc-400">Mín 52 Semanas</span>
               <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
-                {quote.week52Low ? formatCurrency(quote.week52Low) : '-'}
+                {quote.week52Low ? formatCurrency(quote.week52Low, quote.currency) : '-'}
               </span>
             </div>
 
@@ -333,24 +372,24 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
       {quote && (
         <div className="fixed bottom-0 left-0 right-0 z-30 pb-safe pt-2.5 px-4 ios-glass-bar border-t border-black/10 dark:border-white/15 shadow-ios-sheet">
           <div className="max-w-md mx-auto grid grid-cols-2 gap-3 mb-1.5">
-            {/* Apostar en Corto */}
+            {/* Vender en corto */}
             <button
               type="button"
               onClick={() => handleOpenTrade('SHORT')}
               className="py-3 px-3 rounded-2xl bg-ios-orange text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-md ios-active hover:bg-amber-600 active:scale-95 transition-all"
             >
               <TrendingDown className="w-4 h-4 shrink-0" />
-              <span>Apostar en Corto</span>
+              <span>Vender en corto</span>
             </button>
 
-            {/* Apostar a Favor (Largo) */}
+            {/* Comprar (largo) */}
             <button
               type="button"
               onClick={() => handleOpenTrade('LONG')}
               className="py-3 px-3 rounded-2xl bg-ios-green text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-md ios-active hover:bg-emerald-600 active:scale-95 transition-all"
             >
               <TrendingUp className="w-4 h-4 shrink-0" />
-              <span>Apostar a Favor</span>
+              <span>Comprar</span>
             </button>
           </div>
         </div>

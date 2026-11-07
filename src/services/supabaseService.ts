@@ -1,241 +1,153 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { GameSaveData, GameSummary } from '../types/market';
+import { sanitizeEquityHistory, sanitizePosition, sanitizeTrade } from '../lib/portfolio';
 
 const DEFAULT_SUPABASE_URL = 'https://vvxfewktdsltzsxfumio.supabase.co';
-const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_RXWhW8Lu_vIehqKQJAPsQw_GkvczmaZ';
-
-const STORAGE_KEYS = {
-  SUPABASE_URL: 'apex_supabase_url_v1',
-  SUPABASE_ANON_KEY: 'apex_supabase_anon_key_v1',
-};
+const DEFAULT_SUPABASE_KEY = 'sb_publishable_RXWhW8Lu_vIehqKQJAPsQw_GkvczmaZ';
 
 let supabaseClient: SupabaseClient | null = null;
 
-export function getSupabaseCredentials(): { url: string; key: string } {
-  try {
-    const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL;
-    const envKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY;
-    if (envUrl && envKey) {
-      return { url: envUrl, key: envKey };
-    }
-
-    const savedUrl = localStorage.getItem(STORAGE_KEYS.SUPABASE_URL);
-    const savedKey = localStorage.getItem(STORAGE_KEYS.SUPABASE_ANON_KEY);
-    if (savedUrl && savedKey) {
-      return { url: savedUrl.trim(), key: savedKey.trim() };
-    }
-  } catch {}
-
-  return {
-    url: DEFAULT_SUPABASE_URL,
-    key: DEFAULT_SUPABASE_ANON_KEY,
-  };
-}
-
-export function saveSupabaseCredentials(url: string, key: string): boolean {
-  try {
-    const cleanUrl = url.trim();
-    const cleanKey = key.trim();
-    if (!cleanUrl || !cleanKey) return false;
-
-    localStorage.setItem(STORAGE_KEYS.SUPABASE_URL, cleanUrl);
-    localStorage.setItem(STORAGE_KEYS.SUPABASE_ANON_KEY, cleanKey);
-    supabaseClient = createClient(cleanUrl, cleanKey);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export function getSupabase(): SupabaseClient {
   if (supabaseClient) return supabaseClient;
-  const creds = getSupabaseCredentials();
-  supabaseClient = createClient(creds.url, creds.key);
+  const env = (import.meta as any).env || {};
+  const url = env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
+  const key = env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_KEY;
+  supabaseClient = createClient(url, key, { auth: { persistSession: false } });
   return supabaseClient;
 }
 
-export const isCloudConnected = (): boolean => {
-  return true; // Always connected to Supabase
-};
+const SUMMARY_COLUMNS =
+  'id, name, initial_cash, cash_available, cash_invested, total_net_worth, total_pnl, total_pnl_percent, positions_count, has_pin, created_at, updated_at';
 
-export function extractPrivacyAndPin(watchlist: string[] | undefined): { isPrivate: boolean; pinCode?: string; cleanWatchlist: string[] } {
-  const list = watchlist || [];
-  const secTag = list.find((s) => typeof s === 'string' && s.startsWith('__SEC:'));
-  if (!secTag) {
-    return { isPrivate: false, pinCode: undefined, cleanWatchlist: list.filter((s) => typeof s === 'string' && !s.startsWith('__SEC:')) };
-  }
-  const isPrivate = !secTag.includes('PUB');
-  let pinCode: string | undefined = undefined;
-  if (isPrivate && secTag.includes('PRIV:')) {
-    const parts = secTag.split(':');
-    if (parts.length >= 3) {
-      pinCode = parts[2].replace(/__$/, '');
-    }
-  }
+function rowToSummary(row: any): GameSummary {
+  const initialCash = Number(row.initial_cash) || 0;
   return {
-    isPrivate,
-    pinCode,
-    cleanWatchlist: list.filter((s) => typeof s === 'string' && !s.startsWith('__SEC:')),
+    id: row.id,
+    name: row.name,
+    createdAt: Number(row.created_at) || Date.now(),
+    updatedAt: Number(row.updated_at) || Date.now(),
+    initialCash,
+    cashAvailable: Number(row.cash_available) || 0,
+    cashInvested: Number(row.cash_invested) || 0,
+    totalNetWorth: Number(row.total_net_worth) || initialCash,
+    totalPnL: Number(row.total_pnl) || 0,
+    totalPnLPercent: Number(row.total_pnl_percent) || 0,
+    positionsCount: Number(row.positions_count) || 0,
+    hasPin: !!row.has_pin,
   };
 }
 
-export function encodePrivacyTag(isPrivate: boolean, pinCode?: string): string {
-  if (isPrivate) {
-    const cleanPin = (pinCode || '').trim();
-    return cleanPin ? `__SEC:PRIV:${cleanPin}__` : `__SEC:PRIV__`;
-  }
-  return `__SEC:PUB__`;
+function rowToGame(row: any): GameSaveData {
+  const summary = rowToSummary(row);
+  const watchlist: string[] = Array.isArray(row.watchlist)
+    ? row.watchlist.filter((s: unknown) => typeof s === 'string' && s.trim() && !s.startsWith('__SEC:'))
+    : [];
+  return {
+    ...summary,
+    positions: (Array.isArray(row.positions) ? row.positions : []).map(sanitizePosition).filter(Boolean) as any,
+    tradeHistory: (Array.isArray(row.trade_history) ? row.trade_history : []).map(sanitizeTrade).filter(Boolean) as any,
+    watchlist,
+    equityHistory: sanitizeEquityHistory(row.equity_history, summary.createdAt, summary.initialCash),
+  };
 }
 
-// Fetch all games from Supabase
-export async function fetchGamesFromSupabase(): Promise<GameSummary[] | null> {
-  const supabase = getSupabase();
-
+/** Resúmenes de partidas (todas, o sólo las indicadas). null si no hay conexión. */
+export async function fetchGameSummaries(ids?: string[]): Promise<GameSummary[] | null> {
   try {
-    const { data, error } = await supabase
-      .from('games')
-      .select('id, name, initial_cash, cash_available, cash_invested, total_net_worth, total_pnl, total_pnl_percent, positions_count, watchlist, created_at, updated_at')
-      .order('created_at', { ascending: false });
-
-    if (error || !data) {
-      console.warn('Supabase fetch note:', error?.message);
-      return null;
+    let query = getSupabase().from('games').select(SUMMARY_COLUMNS);
+    if (ids) {
+      if (ids.length === 0) return [];
+      query = query.in('id', ids);
     }
-
-    return data.map((g: any) => {
-      const { isPrivate, pinCode } = extractPrivacyAndPin(g.watchlist);
-      return {
-        id: g.id,
-        name: g.name,
-        createdAt: Number(g.created_at),
-        updatedAt: Number(g.updated_at),
-        initialCash: Number(g.initial_cash),
-        cashAvailable: Number(g.cash_available),
-        cashInvested: Number(g.cash_invested),
-        totalNetWorth: Number(g.total_net_worth),
-        totalPnL: Number(g.total_pnl),
-        totalPnLPercent: Number(g.total_pnl_percent),
-        positionsCount: Number(g.positions_count || 0),
-        isPrivate,
-        pinCode,
-      };
-    });
-  } catch (err) {
-    console.warn('Supabase exception:', err);
-    return null;
-  }
-}
-
-// Fetch single game data from Supabase
-export async function fetchGameDataFromSupabase(gameId: string): Promise<GameSaveData | null> {
-  const supabase = getSupabase();
-
-  try {
-    const { data, error } = await supabase
-      .from('games')
-      .select('*')
-      .eq('id', gameId.trim().toUpperCase())
-      .single();
-
+    const { data, error } = await query.order('total_net_worth', { ascending: false }).limit(500);
     if (error || !data) return null;
-
-    const { isPrivate, pinCode, cleanWatchlist } = extractPrivacyAndPin(data.watchlist);
-
-    return {
-      id: data.id,
-      name: data.name,
-      createdAt: Number(data.created_at),
-      updatedAt: Number(data.updated_at),
-      initialCash: Number(data.initial_cash),
-      cashAvailable: Number(data.cash_available),
-      cashInvested: Number(data.cash_invested),
-      totalNetWorth: Number(data.total_net_worth),
-      totalPnL: Number(data.total_pnl),
-      totalPnLPercent: Number(data.total_pnl_percent),
-      positionsCount: Number(data.positions_count || 0),
-      positions: data.positions || [],
-      tradeHistory: data.trade_history || [],
-      watchlist: cleanWatchlist,
-      isPrivate,
-      pinCode,
-    };
+    return data.map(rowToSummary);
   } catch {
     return null;
   }
 }
 
-// Upsert game data into Supabase
-export async function saveGameToSupabase(game: GameSaveData): Promise<boolean> {
-  const supabase = getSupabase();
+export type FetchGameResult = { status: 'ok'; game: GameSaveData } | { status: 'not_found' } | { status: 'offline' };
 
+export async function fetchGame(gameId: string): Promise<FetchGameResult> {
   try {
-    const tag = encodePrivacyTag(game.isPrivate ?? true, game.pinCode);
-    const cleanWatchlist = (game.watchlist || []).filter((s) => typeof s === 'string' && !s.startsWith('__SEC:'));
-    const finalWatchlist = [tag, ...cleanWatchlist];
+    const { data, error } = await getSupabase().from('games').select('*').eq('id', gameId).maybeSingle();
+    if (error) return { status: 'offline' };
+    if (!data) return { status: 'not_found' };
+    return { status: 'ok', game: rowToGame(data) };
+  } catch {
+    return { status: 'offline' };
+  }
+}
 
-    const payload = {
-      id: game.id,
-      name: game.name,
-      initial_cash: game.initialCash,
-      cash_available: game.cashAvailable,
-      cash_invested: game.cashInvested,
-      total_net_worth: game.totalNetWorth,
-      total_pnl: game.totalPnL,
-      total_pnl_percent: game.totalPnLPercent,
-      positions_count: game.positions ? game.positions.length : 0,
-      positions: game.positions || [],
-      trade_history: game.tradeHistory || [],
-      watchlist: finalWatchlist,
-      created_at: game.createdAt || Date.now(),
-      updated_at: Date.now(),
-    };
+export interface RpcResult {
+  ok: boolean;
+  error?: string;
+  token?: string | null;
+  updated_at?: number;
+  retry_after?: number;
+  attempts_left?: number;
+}
 
-    const { error } = await supabase
-      .from('games')
-      .upsert(payload, { onConflict: 'id' });
-
+async function callRpc(name: string, args: Record<string, unknown>): Promise<RpcResult> {
+  try {
+    const { data, error } = await getSupabase().rpc(name, args);
     if (error) {
-      console.warn('Supabase save note:', error.message);
-      return false;
+      // PGRST202 = la función no existe: falta ejecutar la migración SQL
+      if (error.code === 'PGRST202' || /Could not find the function/i.test(error.message)) {
+        return { ok: false, error: 'MIGRATION_MISSING' };
+      }
+      return { ok: false, error: 'SERVER' };
     }
-    return true;
+    return (data as RpcResult) ?? { ok: false, error: 'SERVER' };
   } catch {
-    return false;
+    return { ok: false, error: 'NETWORK' };
   }
 }
 
-// Delete game from Supabase
-export async function deleteGameFromSupabase(gameId: string): Promise<boolean> {
+export const gamesRpc = {
+  create: (id: string, name: string, initialCash: number, pin?: string) =>
+    callRpc('sg_create_game', { p_id: id, p_name: name, p_initial_cash: initialCash, p_pin: pin || null }),
+
+  save: (game: GameSaveData, token: string | null) =>
+    callRpc('sg_save_game', {
+      p_id: game.id,
+      p_token: token,
+      p_state: {
+        name: game.name,
+        initial_cash: game.initialCash,
+        cash_available: game.cashAvailable,
+        cash_invested: game.cashInvested,
+        total_net_worth: game.totalNetWorth,
+        total_pnl: game.totalPnL,
+        total_pnl_percent: game.totalPnLPercent,
+        positions: game.positions,
+        trade_history: game.tradeHistory,
+        watchlist: game.watchlist,
+        equity_history: game.equityHistory,
+      },
+    }),
+
+  unlock: (id: string, pin: string) => callRpc('sg_unlock_game', { p_id: id, p_pin: pin }),
+
+  setPin: (id: string, token: string | null, newPin: string | null) =>
+    callRpc('sg_set_pin', { p_id: id, p_token: token, p_new_pin: newPin }),
+
+  remove: (id: string, token: string | null) => callRpc('sg_delete_game', { p_id: id, p_token: token }),
+};
+
+/** Escucha cambios de UNA partida (otro dispositivo guardó o la borró). */
+export function subscribeToGame(gameId: string, onChange: (event: 'UPDATE' | 'DELETE') => void): () => void {
   const supabase = getSupabase();
-
-  try {
-    const { error } = await supabase
-      .from('games')
-      .delete()
-      .eq('id', gameId.trim().toUpperCase());
-
-    return !error;
-  } catch {
-    return false;
-  }
-}
-
-// Subscribe to real-time database changes across all devices
-export function subscribeToSupabaseRealtime(onSync: () => void): () => void {
-  const supabase = getSupabase();
-
   try {
     const channel = supabase
-      .channel('public:games_sync')
+      .channel(`game:${gameId}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'games' },
-        () => {
-          onSync();
-        }
+        { event: '*', schema: 'public', table: 'games', filter: `id=eq.${gameId}` },
+        (payload: any) => onChange(payload.eventType === 'DELETE' ? 'DELETE' : 'UPDATE')
       )
       .subscribe();
-
     return () => {
       supabase.removeChannel(channel);
     };

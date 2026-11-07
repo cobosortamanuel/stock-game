@@ -1,0 +1,30 @@
+name: Supabase keep-alive
+
+# El plan gratuito de Supabase pausa los proyectos tras 7 días sin actividad.
+# Esta tarea hace una consulta ligera cada 3 días para mantenerlo activo.
+# Nota: GitHub desactiva los workflows programados si el repositorio pasa
+# 60 días sin commits; en ese caso, reactívalo desde la pestaña Actions.
+
+on:
+  schedule:
+    - cron: '17 6 */3 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Consultar la base de datos
+        env:
+          # Clave publicable (pública por diseño; es la misma que usa la web)
+          SUPABASE_URL: https://vvxfewktdsltzsxfumio.supabase.co
+          SUPABASE_KEY: sb_publishable_RXWhW8Lu_vIehqKQJAPsQw_GkvczmaZ
+        run: |
+          status=$(curl -s -o /dev/null -w "%{http_code}" \
+            "$SUPABASE_URL/rest/v1/games?select=id&limit=1" \
+            -H "apikey: $SUPABASE_KEY")
+          echo "Supabase respondió HTTP $status"
+          test "$status" = "200"

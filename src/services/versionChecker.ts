@@ -1,7 +1,7 @@
 declare const __APP_BUILD_ID__: string;
 
 export const CURRENT_BUILD_ID = typeof __APP_BUILD_ID__ !== 'undefined' ? __APP_BUILD_ID__ : 'dev';
-export const APP_VERSION = '1.0.8';
+export const APP_VERSION = '2.0.0';
 const RELOAD_GUARD_KEY = 'stock_game_last_reloaded_build_v1';
 
 /**

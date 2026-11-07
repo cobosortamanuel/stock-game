@@ -17,7 +17,7 @@ export const HistoryView: React.FC = () => {
       {/* Analytics Overview Cards */}
       <div className="bg-white dark:bg-ios-card-dark rounded-3xl p-5 border border-black/5 dark:border-white/5 shadow-ios">
         <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-3">
-          Rendimiento y Registro de Apuestas
+          Rendimiento de tus operaciones
         </h2>
 
         <div className="grid grid-cols-2 gap-3">
@@ -25,13 +25,13 @@ export const HistoryView: React.FC = () => {
           <div className="p-3 bg-zinc-100 dark:bg-zinc-800/60 rounded-2xl">
             <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 font-medium">
               <Target className="w-3.5 h-3.5 text-ios-blue" />
-              <span>Tasa de Acierto</span>
+              <span>Tasa de acierto</span>
             </div>
             <div className="text-xl font-bold font-mono text-zinc-900 dark:text-zinc-50 mt-1">
               {winRate.toFixed(1)}%
             </div>
             <div className="text-[10px] text-zinc-400 mt-0.5">
-              {winningTrades.length} de {closedTrades.length} apuestas
+              {winningTrades.length} de {closedTrades.length} operaciones cerradas
             </div>
           </div>
 
@@ -39,7 +39,7 @@ export const HistoryView: React.FC = () => {
           <div className="p-3 bg-zinc-100 dark:bg-zinc-800/60 rounded-2xl min-w-0">
             <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 font-medium truncate">
               <History className="w-3.5 h-3.5 text-ios-green shrink-0" />
-              <span className="truncate">Beneficio Cerrado</span>
+              <span className="truncate">Beneficio realizado</span>
             </div>
             <div
               className={`text-base sm:text-xl font-bold font-mono mt-1 truncate ${
@@ -58,7 +58,7 @@ export const HistoryView: React.FC = () => {
       {/* Trades History List */}
       <div>
         <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-50 mb-2 px-1">
-          Historial de Movimientos ({tradeHistory.length})
+          Historial de operaciones ({tradeHistory.length})
         </h3>
 
         {tradeHistory.length > 0 ? (
@@ -135,7 +135,7 @@ export const HistoryView: React.FC = () => {
                           {formatCurrency(trade.investedAmount)}
                         </div>
                         <div className="text-[10px] text-zinc-400 font-mono">
-                          a {formatCurrency(trade.entryPrice)}
+                          a {formatCurrency(trade.entryPrice, trade.currency || 'USD')}
                         </div>
                       </div>
                     )}
