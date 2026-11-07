@@ -19,9 +19,9 @@ There is no test suite. `npm run build` (which type-checks) is the main correctn
 
 ## Deployment
 
-- **Vercel** is the intended host: it serves `dist/` and the Edge Function `api/market.ts` (market data proxy). `vercel.json` rewrites everything except `/api/*` to `index.html`.
-- Pushing to `main` also triggers `.github/workflows/deploy.yml` (GitHub Pages). Pages has no `/api`, so there the client falls back to the Supabase function `market` (or set `VITE_MARKET_API_URL` to the Vercel URL).
-- `.github/workflows/supabase-keepalive.yml` pings Supabase every 3 days so the free project is not paused for inactivity.
+- Hosted on **GitHub Pages** (https://cobosortamanuel.github.io/stock-game/): pushing to `main` triggers `.github/workflows/deploy.yml`, which builds and deploys `dist/`.
+- Market data comes from the **Supabase Edge Function** `market` (`supabase/functions/market/index.ts`, a Yahoo Finance proxy). It is NOT deployed by CI: after changing it run `npx supabase functions deploy market --project-ref vvxfewktdsltzsxfumio --no-verify-jwt` (or paste it in the dashboard editor).
+- `.github/workflows/supabase-keepalive.yml` pings the database and the `market` function every 3 days so the free Supabase project is not paused, and re-enables itself through the API so GitHub does not disable it after 60 days without commits.
 - `base: './'` in `vite.config.ts` keeps asset paths relative; the service worker is registered relative to `BASE_URL` in `src/main.tsx`.
 - Every build regenerates `public/version.json` (tracked in git, so builds dirty the working tree) and injects `__APP_BUILD_ID__`. `src/services/versionChecker.ts` polls it and hard-reloads on a new build. `APP_VERSION` there is a hand-maintained display string.
 - `public/sw.js` is a hand-written network-first service worker; bump `CACHE_NAME` when changing its caching behavior.
@@ -32,7 +32,6 @@ There is no test suite. `npm run build` (which type-checks) is the main correctn
 - `games` is **read-only** for the app (RLS select-only). All writes go through RPCs: `sg_create_game`, `sg_save_game`, `sg_unlock_game`, `sg_set_pin`, `sg_delete_game`. They return `{ ok, error, token, ... }` instead of raising.
 - PINs are optional (default none), 4–8 digits, stored bcrypt-hashed in `game_secrets` (no client access). A correct PIN returns a random **device token** (sha256 stored in `game_tokens`); writes to a PIN game require it. Changing the PIN revokes all tokens. 5+ failed PINs lock exponentially (max 24 h).
 - `has_pin` and `equity_history` (net-worth snapshots `{t, v}`) are columns on `games`.
-- `supabase/functions/market/index.ts` is a copy of `api/market.ts` (fallback); keep them in sync.
 
 ## Architecture
 
@@ -50,13 +49,13 @@ There is no test suite. `npm run build` (which type-checks) is the main correctn
 **Currencies:** prices stay in the asset's native currency (`quote.currency`, incl. subunits like `GBp`); cash and P&L are USD. Positions store `currency` and `entryFx`; FX comes from Yahoo `XXXUSD=X` quotes (`getFxRate`). Legacy positions without `currency` are treated as USD.
 
 **Services (`src/services/`)**
-- `marketApi.ts` — curated catalog (`POPULAR_SYMBOLS`, `MARKET_CATEGORIES`, no prices), `fetchStockData`, `fetchBatchQuotes`, `fetchScreener` (real Yahoo lists: most active/gainers/losers by region, crypto, ETFs), `searchSymbols`, `getMarketStatus`, formatters. Calls `/api/market`, falling back to the Supabase function.
+- `marketApi.ts` — curated catalog (`POPULAR_SYMBOLS`, `MARKET_CATEGORIES`, no prices), `fetchStockData`, `fetchBatchQuotes`, `fetchScreener` (real Yahoo lists: most active/gainers/losers by region, crypto, ETFs), `searchSymbols`, `getMarketStatus`, formatters. Calls the Supabase function (in dev, the local `/api/market` first).
 - `gamesHubApi.ts` — create/join/load/save/PIN/delete, plus localStorage: joined ids (`apex_joined_games_v1`), device tokens (`apex_game_tokens_v1`), pending-sync flags, and caches (`apex_games_registry_v8`, `apex_game_save_v8_<id>`).
 - `supabaseService.ts` — client, row mapping, RPC wrappers, per-game realtime subscription.
 
 Domain types live in `src/types/market.ts`.
 
-**Dev:** `npm run dev` serves `/api/market` through a Vite middleware that runs the same `api/market.ts` handler.
+**Dev:** `npm run dev` serves `/api/market` through a Vite middleware that runs `supabase/functions/market/index.ts` locally, so function changes can be tested before deploying them.
 
 **Styling:** Tailwind with custom iOS tokens (`ios-blue`, `ios-bg-light/dark`, `shadow-ios-*`, ...) in `tailwind.config.js`; dark mode is class-based and toggled from the context. Layout is constrained to `max-w-md` (phone width).
 

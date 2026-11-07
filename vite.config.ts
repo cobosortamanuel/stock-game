@@ -37,7 +37,7 @@ function versionPlugin(): Plugin {
   }
 }
 
-// Dev-only: sirve /api/market con el mismo handler que la función de Vercel (api/market.ts)
+// Dev-only: sirve /api/market con el mismo código que la función de Supabase
 function marketApiDev(): Plugin {
   return {
     name: "market-api-dev",
@@ -45,7 +45,7 @@ function marketApiDev(): Plugin {
       server.middlewares.use(async (req, res, next) => {
         if (!req.url || !/^\/api\/market(\?|$)/.test(req.url)) return next();
         try {
-          const mod = await server.ssrLoadModule("/api/market.ts");
+          const mod = await server.ssrLoadModule("/supabase/functions/market/index.ts");
           const response: Response = await mod.default(new Request(`http://localhost${req.url}`, { method: req.method }));
           res.statusCode = response.status;
           response.headers.forEach((value, key) => res.setHeader(key, value));

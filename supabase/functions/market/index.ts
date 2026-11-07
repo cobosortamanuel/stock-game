@@ -1,6 +1,13 @@
-// Copia de api/market.ts para Supabase Edge Functions (respaldo). Mantener sincronizada.
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-
+// Supabase Edge Function "market": proxy de datos de mercado (Yahoo Finance).
+// Es la única copia del código: la app la usa en producción (GitHub Pages) y el
+// servidor de desarrollo de Vite la carga en local para servir /api/market.
+//
+// GET ?symbol=AAPL&range=1d&interval=5m   -> gráfica + cotización
+// GET ?symbols=AAPL,MSFT,SAN.MC           -> cotizaciones en lote (hasta 100)
+// GET ?q=apple                             -> búsqueda de símbolos
+// GET ?screener=most_actives&count=50      -> listas reales (ver SCREENERS)
+//
+// Publicar: npx supabase functions deploy market --project-ref vvxfewktdsltzsxfumio --no-verify-jwt
 const YAHOO = 'https://query1.finance.yahoo.com';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
 
@@ -45,7 +52,7 @@ async function yahoo(path: string): Promise<{ ok: boolean; status: number; data:
   return { ok: res.ok, status: res.status, data };
 }
 
-async function handler(req: Request): Promise<Response> {
+export default async function handler(req: Request): Promise<Response> {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
   if (req.method !== 'GET') return json({ error: 'Método no permitido' }, 405);
 
@@ -110,4 +117,6 @@ async function handler(req: Request): Promise<Response> {
   }
 }
 
-Deno.serve(handler);
+// En Supabase (Deno) se arranca el servidor; en Node (Vite) sólo se exporta el handler.
+const deno = (globalThis as any).Deno;
+if (deno?.serve) deno.serve(handler);

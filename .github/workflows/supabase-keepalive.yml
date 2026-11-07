@@ -1,9 +1,11 @@
 name: Supabase keep-alive
 
 # El plan gratuito de Supabase pausa los proyectos tras 7 días sin actividad.
-# Esta tarea hace una consulta ligera cada 3 días para mantenerlo activo.
-# Nota: GitHub desactiva los workflows programados si el repositorio pasa
-# 60 días sin commits; en ese caso, reactívalo desde la pestaña Actions.
+# Esta tarea consulta la base de datos y la función "market" cada 3 días.
+#
+# GitHub desactiva los workflows programados de repositorios públicos tras
+# 60 días sin actividad. Para evitarlo, el último paso vuelve a habilitar
+# este mismo workflow mediante la API (no hace commits ni despliega nada).
 
 on:
   schedule:
@@ -12,19 +14,34 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 jobs:
   ping:
     runs-on: ubuntu-latest
+    env:
+      # Clave publicable (pública por diseño; es la misma que usa la web)
+      SUPABASE_URL: https://vvxfewktdsltzsxfumio.supabase.co
+      SUPABASE_KEY: sb_publishable_RXWhW8Lu_vIehqKQJAPsQw_GkvczmaZ
     steps:
       - name: Consultar la base de datos
-        env:
-          # Clave publicable (pública por diseño; es la misma que usa la web)
-          SUPABASE_URL: https://vvxfewktdsltzsxfumio.supabase.co
-          SUPABASE_KEY: sb_publishable_RXWhW8Lu_vIehqKQJAPsQw_GkvczmaZ
         run: |
-          status=$(curl -s -o /dev/null -w "%{http_code}" \
+          status=$(curl -s -o /dev/null -w "%{http_code}" --retry 3 --retry-delay 10 \
             "$SUPABASE_URL/rest/v1/games?select=id&limit=1" \
             -H "apikey: $SUPABASE_KEY")
-          echo "Supabase respondió HTTP $status"
+          echo "Base de datos: HTTP $status"
           test "$status" = "200"
+
+      - name: Llamar a la función de mercado
+        run: |
+          status=$(curl -s -o /dev/null -w "%{http_code}" --retry 3 --retry-delay 10 \
+            "$SUPABASE_URL/functions/v1/market?symbols=AAPL" \
+            -H "apikey: $SUPABASE_KEY" -H "Authorization: Bearer $SUPABASE_KEY")
+          echo "Función market: HTTP $status"
+          test "$status" = "200"
+
+      - name: Evitar que GitHub desactive este workflow
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/supabase-keepalive.yml/enable"

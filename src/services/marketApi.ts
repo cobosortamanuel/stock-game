@@ -370,17 +370,20 @@ interface Endpoint {
   headers: Record<string, string>;
 }
 
+/**
+ * Producción (GitHub Pages): función "market" de Supabase.
+ * Desarrollo (npm run dev): /api/market del servidor de Vite, que ejecuta el mismo código en local.
+ * VITE_MARKET_API_URL permite apuntar a otro proxy si algún día hiciera falta.
+ */
 function getEndpoints(): Endpoint[] {
   const env = (import.meta as any).env || {};
-  const primary: string = env.VITE_MARKET_API_URL || new URL('api/market', document.baseURI).toString();
-  return [
-    { url: primary, headers: {} },
-    // Respaldo: función de Supabase (por si la app está alojada sin la API de Vercel)
-    {
-      url: SUPABASE_FUNCTION_URL,
-      headers: { apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}` },
-    },
-  ];
+  const supabase: Endpoint = {
+    url: SUPABASE_FUNCTION_URL,
+    headers: { apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}` },
+  };
+  if (env.VITE_MARKET_API_URL) return [{ url: env.VITE_MARKET_API_URL, headers: {} }, supabase];
+  if (env.DEV) return [{ url: new URL('api/market', document.baseURI).toString(), headers: {} }, supabase];
+  return [supabase];
 }
 
 let preferredEndpoint = 0;
