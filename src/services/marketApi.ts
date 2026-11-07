@@ -1,4 +1,5 @@
 import { StockQuote, ChartPoint, TimeRange, SearchResult } from '../types/market';
+import { BarsBySymbol, DailyBar, parseDailyBars, yahooRangeSince } from '../lib/history';
 
 export interface CatalogItem {
   symbol: string;
@@ -452,6 +453,7 @@ function quoteFromMeta(meta: any, isDailyRange: boolean): StockQuote | null {
     low: meta.regularMarketDayLow ?? price,
     prevClose: round(prevClose, precision),
     volume: meta.regularMarketVolume ? Number(meta.regularMarketVolume).toLocaleString('es-ES') : 'N/A',
+    volumeRaw: Number(meta.regularMarketVolume) || 0,
     marketCap: meta.marketCap ? formatCurrency(meta.marketCap, meta.currency || 'USD', true) : 'N/A',
     week52High: meta.fiftyTwoWeekHigh,
     week52Low: meta.fiftyTwoWeekLow,
@@ -630,6 +632,35 @@ export async function searchSymbols(query: string, signal?: AbortSignal): Promis
   return Array.from(resultMap.values());
 }
 
+const dailyBarsCache = new Map<string, { bars: DailyBar[]; range: string; at: number }>();
+
+/** Velas diarias reales desde `sinceMs` (para el histórico y las órdenes pendientes). */
+export async function fetchDailyBars(symbols: string[], sinceMs: number): Promise<BarsBySymbol> {
+  const range = yahooRangeSince(sinceMs);
+  const order = ['5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', '10y'];
+  const result: BarsBySymbol = {};
+  await Promise.all(
+    Array.from(new Set(symbols)).map(async (symbol) => {
+      const cached = dailyBarsCache.get(symbol);
+      if (cached && Date.now() - cached.at < 10 * 60 * 1000 && order.indexOf(cached.range) >= order.indexOf(range)) {
+        result[symbol] = cached.bars;
+        return;
+      }
+      try {
+        const data = await marketRequest({ symbol, range, interval: '1d' }, 10000);
+        const bars = parseDailyBars(data);
+        if (bars.length > 0) {
+          dailyBarsCache.set(symbol, { bars, range, at: Date.now() });
+          result[symbol] = bars;
+        }
+      } catch {
+        // sin datos para este símbolo
+      }
+    })
+  );
+  return result;
+}
+
 /** Lista real de Yahoo (más negociadas, suben, bajan, cripto...). */
 export async function fetchScreener(
   id: string,
@@ -657,6 +688,7 @@ export async function fetchScreener(
       low: q.regularMarketDayLow ?? price,
       prevClose: round(prevClose, precision),
       volume: q.regularMarketVolume ? Number(q.regularMarketVolume).toLocaleString('es-ES') : 'N/A',
+      volumeRaw: Number(q.regularMarketVolume) || 0,
       marketCap: q.marketCap ? formatCurrency(q.marketCap, q.currency || 'USD', true) : 'N/A',
       week52High: q.fiftyTwoWeekHigh,
       week52Low: q.fiftyTwoWeekLow,

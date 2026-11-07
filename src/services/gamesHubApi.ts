@@ -1,6 +1,7 @@
 import { GameSaveData, GameSummary } from '../types/market';
 import { sanitizeEquityHistory, sanitizePosition, sanitizeTrade } from '../lib/portfolio';
-import { fetchGame, fetchGameSummaries, gamesRpc, RpcResult } from './supabaseService';
+import { sanitizePendingOrder } from '../lib/history';
+import { fetchGame, fetchGameSummaries, fetchRankingEntries, gamesRpc, RankingEntry, RpcResult } from './supabaseService';
 
 // Claves de localStorage (prefijo apex_ heredado; no cambiar los sufijos existentes)
 const REGISTRY_KEY = 'apex_games_registry_v8'; // resúmenes de mis partidas (caché)
@@ -126,12 +127,14 @@ export function getCachedGame(id: string): GameSaveData | null {
     tradeHistory: (raw.tradeHistory || []).map(sanitizeTrade).filter(Boolean),
     watchlist: (raw.watchlist || []).filter((s: unknown) => typeof s === 'string' && !String(s).startsWith('__SEC:')),
     equityHistory: sanitizeEquityHistory(raw.equityHistory, createdAt, initialCash),
+    pendingOrders: (raw.pendingOrders || []).map(sanitizePendingOrder).filter(Boolean),
+    dailyHistory: Array.isArray(raw.dailyHistory) ? raw.dailyHistory : [],
   };
 }
 
 function cacheGame(game: GameSaveData) {
   writeJson(`${LOCAL_GAMES_PREFIX}${game.id}`, game);
-  const { positions, tradeHistory, watchlist, equityHistory, ...summary } = game;
+  const { positions, tradeHistory, watchlist, equityHistory, pendingOrders, dailyHistory, ...summary } = game;
   writeJson(REGISTRY_KEY, [summary, ...readJson<GameSummary[]>(REGISTRY_KEY, []).filter((g) => g.id !== game.id)]);
 }
 
@@ -157,8 +160,8 @@ export async function fetchMyGames(): Promise<GameSummary[]> {
   return getCachedSummaries().sort((a, b) => (order.get(a.id) ?? 99) - (order.get(b.id) ?? 99));
 }
 
-export async function fetchRanking(): Promise<GameSummary[] | null> {
-  return fetchGameSummaries();
+export async function fetchRanking(): Promise<RankingEntry[] | null> {
+  return fetchRankingEntries();
 }
 
 export type LoadGameResult =
@@ -177,13 +180,13 @@ export async function loadGame(id: string): Promise<LoadGameResult> {
 
   const game = remote.game;
   if (game.hasPin && !getToken(id)) {
-    const { positions, tradeHistory, watchlist, equityHistory, ...summary } = game;
+    const { positions, tradeHistory, watchlist, equityHistory, pendingOrders, dailyHistory, ...summary } = game;
     return { status: 'needs_pin', summary };
   }
 
   // Si hay cambios locales sin subir más recientes que la nube, mandan los locales
   if (cached && hasPendingSync(id) && cached.updatedAt > game.updatedAt) {
-    return { status: 'ok', game: { ...cached, hasPin: game.hasPin }, fromCache: true };
+    return { status: 'ok', game: { ...cached, hasPin: game.hasPin, dailyHistory: game.dailyHistory }, fromCache: true };
   }
   cacheGame(game);
   return { status: 'ok', game, fromCache: false };
@@ -253,6 +256,8 @@ export async function createGame(name: string, initialCash: number, pin?: string
       tradeHistory: [],
       watchlist: [],
       equityHistory: [{ t: now, v: initialCash }],
+      pendingOrders: [],
+      dailyHistory: [],
     };
     cacheGame(game);
     return { ok: true, game };

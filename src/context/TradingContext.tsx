@@ -1,6 +1,14 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { EquityPoint, GameSaveData, GameSummary, PositionType, PositionView, StockQuote, TradeRecord } from '../types/market';
-import { formatCurrency } from '../services/marketApi';
+import { EquityPoint, GameSaveData, GameSummary, PendingOrder, PositionType, PositionView, StockQuote, TradeRecord } from '../types/market';
+import { fetchDailyBars, formatCurrency, getMarketStatus, isAlwaysOpen } from '../services/marketApi';
+import {
+  applyPendingFills,
+  DAY_MS,
+  historyStart,
+  mergeHistories,
+  reconstructDailyHistory,
+  symbolsNeeded,
+} from '../lib/history';
 import {
   createGame as apiCreateGame,
   deleteGame as apiDeleteGame,
@@ -77,6 +85,9 @@ interface TradingContextType {
   dailyPnL: number;
   dailyPnLPercent: number;
   equityHistory: EquityPoint[];
+  /** Histórico completo de patrimonio: cierres diarios + puntos intradía */
+  netWorthHistory: EquityPoint[];
+  pendingOrders: PendingOrder[];
   positions: PositionView[];
   tradeHistory: TradeRecord[];
   watchlist: string[];
@@ -94,6 +105,7 @@ interface TradingContextType {
   // Operaciones
   openPosition: (quote: StockQuote, amountUsd: number, type: PositionType) => ActionResult;
   closePosition: (positionId: string, percentageToClose?: number) => ActionResult;
+  cancelOrder: (orderId: string) => void;
   toggleWatchlist: (symbol: string) => void;
   resetAccount: () => void;
 }
@@ -106,6 +118,14 @@ const STORAGE_KEYS = {
 };
 
 const SAVE_DEBOUNCE_MS = 800;
+const HISTORY_CHECK_MS = 5 * 60 * 1000;
+
+/** USD reservados en órdenes de compra pendientes */
+const reservedOf = (g: GameSaveData | null) =>
+  g ? g.pendingOrders.reduce((acc, o) => acc + (o.kind === 'OPEN' ? o.amount || 0 : 0), 0) : 0;
+
+/** El mercado del activo está cerrado (las criptomonedas nunca cierran) */
+const isMarketClosed = (q: StockQuote | undefined) => !!q && !isAlwaysOpen(q) && getMarketStatus(q) === 'CLOSED';
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
 function readInitialGame(): GameSaveData | null {
@@ -211,7 +231,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const summary = useMemo(
     () =>
       game
-        ? summarizePortfolio(game.positions, game.cashAvailable, game.initialCash, market.quotes, market.fxRates)
+        ? summarizePortfolio(game.positions, game.cashAvailable, game.initialCash, market.quotes, market.fxRates, reservedOf(game))
         : summarizePortfolio([], 0, 0, {}, {}),
     [game, market.quotes, market.fxRates]
   );
@@ -251,7 +271,14 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     dirtyRef.current = false;
     setSyncStatus('saving');
 
-    const totals = summarizePortfolio(current.positions, current.cashAvailable, current.initialCash, quotesRef.current, fxRef.current);
+    const totals = summarizePortfolio(
+      current.positions,
+      current.cashAvailable,
+      current.initialCash,
+      quotesRef.current,
+      fxRef.current,
+      reservedOf(current)
+    );
     const payload: GameSaveData = {
       ...current,
       cashInvested: round2(totals.cashInvested),
@@ -560,6 +587,31 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
       if (!quote || !(quote.price > 0)) return { success: false, message: 'No hay cotización disponible para este activo.' };
 
+      if (isMarketClosed(quote)) {
+        const now = Date.now();
+        updateGame((g) => ({
+          ...g,
+          cashAvailable: Math.max(0, round2(g.cashAvailable - amount)),
+          pendingOrders: [
+            ...g.pendingOrders,
+            {
+              id: `ord_${now}_${Math.random().toString(36).slice(2, 8)}`,
+              kind: 'OPEN',
+              symbol: quote.symbol,
+              name: quote.name,
+              type,
+              currency: quote.currency,
+              createdAt: now,
+              amount,
+            },
+          ],
+        }));
+        return {
+          success: true,
+          message: `Orden programada: ${type === 'LONG' ? 'compra' : 'venta en corto'} de ${quote.symbol} por ${formatCurrency(amount)} al precio de apertura del próximo día de mercado.`,
+        };
+      }
+
       const fx = getFxRate(quote.currency, fxRef.current);
       if (!fx) {
         mergeQuote(quote);
@@ -621,6 +673,37 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     (positionId: string, percentageToClose: number = 100): ActionResult => {
       const view = summaryRef.current.views.find((p) => p.id === positionId);
       if (!view) return { success: false, message: 'Posición no encontrada.' };
+      const current = gameRef.current;
+      if (current?.pendingOrders.some((o) => o.kind === 'CLOSE' && o.positionId === positionId)) {
+        return { success: false, message: 'Ya hay una orden de cierre pendiente para esta posición.' };
+      }
+
+      if (isMarketClosed(quotesRef.current[view.symbol])) {
+        const now = Date.now();
+        const fraction = Math.min(100, Math.max(1, percentageToClose)) / 100;
+        updateGame((g) => ({
+          ...g,
+          pendingOrders: [
+            ...g.pendingOrders,
+            {
+              id: `ord_${now}_${Math.random().toString(36).slice(2, 8)}`,
+              kind: 'CLOSE',
+              symbol: view.symbol,
+              name: view.name,
+              type: view.type,
+              currency: view.currency || 'USD',
+              createdAt: now,
+              positionId,
+              fraction,
+            },
+          ],
+        }));
+        return {
+          success: true,
+          message: `Cierre programado (${Math.round(fraction * 100)}%) al precio de apertura del próximo día de mercado.`,
+        };
+      }
+
       if (!view.hasPrice) {
         ensureQuotes([view.symbol], 0);
         return { success: false, message: `Todavía no hay cotización de ${view.symbol}. Inténtalo en unos segundos.` };
@@ -670,6 +753,81 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     [ensureQuotes, updateGame]
   );
 
+  const cancelOrder = useCallback(
+    (orderId: string) => {
+      updateGame((g) => {
+        const order = g.pendingOrders.find((o) => o.id === orderId);
+        if (!order) return g;
+        return {
+          ...g,
+          cashAvailable: round2(g.cashAvailable + (order.kind === 'OPEN' ? order.amount || 0 : 0)),
+          pendingOrders: g.pendingOrders.filter((o) => o.id !== orderId),
+        };
+      });
+    },
+    [updateGame]
+  );
+
+  // ------------------------------------------------------------------
+  // Órdenes pendientes e histórico diario
+  // ------------------------------------------------------------------
+  const [localDaily, setLocalDaily] = useState<{ gameId: string; points: EquityPoint[] } | null>(null);
+  const historyCheckRef = useRef<{ gameId: string; at: number } | null>(null);
+
+  const processHistoryAndOrders = useCallback(async () => {
+    const current = gameRef.current;
+    if (!current) return;
+    const now = Date.now();
+
+    // 1. Ejecutar órdenes pendientes cuya sesión ya abrió (precio de apertura real)
+    if (current.pendingOrders.length > 0) {
+      const since = Math.min(...current.pendingOrders.map((o) => o.createdAt)) - 3 * DAY_MS;
+      const symbols = symbolsNeeded({ tradeHistory: [], positions: current.positions, pendingOrders: current.pendingOrders });
+      const bars = await fetchDailyBars(symbols, since);
+      if (gameRef.current?.id === current.id) {
+        const { filled } = applyPendingFills(gameRef.current, bars, now);
+        if (filled > 0) updateGame((g) => applyPendingFills(g, bars, now).game);
+      }
+    }
+
+    // 2. Histórico diario: si el servidor aún no lo ha calculado (o va con retraso), reconstruirlo aquí
+    const g = gameRef.current;
+    if (!g || g.id !== current.id) return;
+    const lastServer = g.dailyHistory[g.dailyHistory.length - 1]?.t ?? 0;
+    const check = historyCheckRef.current;
+    const recentlyChecked = check && check.gameId === g.id && now - check.at < 6 * 60 * 60 * 1000;
+    if (now - lastServer > 30 * 60 * 60 * 1000 && !recentlyChecked && g.tradeHistory.length > 0) {
+      historyCheckRef.current = { gameId: g.id, at: now };
+      const start = historyStart(g);
+      const bars = await fetchDailyBars(symbolsNeeded(g), start - 3 * DAY_MS);
+      if (gameRef.current?.id !== g.id) return;
+      const points = reconstructDailyHistory({ start, initialCash: g.initialCash, trades: g.tradeHistory, bars, now });
+      setLocalDaily({ gameId: g.id, points });
+    }
+  }, [updateGame]);
+
+  useEffect(() => {
+    if (!activeGameId) return;
+    processHistoryAndOrders();
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') processHistoryAndOrders();
+    }, HISTORY_CHECK_MS);
+    return () => clearInterval(interval);
+  }, [activeGameId, processHistoryAndOrders]);
+
+  const netWorthHistory = useMemo(() => {
+    if (!game) return [];
+    const daily =
+      localDaily && localDaily.gameId === game.id && (localDaily.points.at(-1)?.t ?? 0) > (game.dailyHistory.at(-1)?.t ?? 0)
+        ? localDaily.points
+        : game.dailyHistory;
+    const start = historyStart(game);
+    return mergeHistories(
+      daily.filter((p) => p.t >= start),
+      game.equityHistory
+    );
+  }, [game, localDaily]);
+
   const toggleWatchlist = useCallback(
     (symbol: string) => {
       updateGame((g) => ({
@@ -687,6 +845,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       cashAvailable: g.initialCash,
       positions: [],
       tradeHistory: [],
+      pendingOrders: [],
+      dailyHistory: [],
       equityHistory: [{ t: now, v: g.initialCash }],
     }));
   }, [updateGame]);
@@ -728,6 +888,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     dailyPnL: summary.dailyPnL,
     dailyPnLPercent: summary.dailyPnLPercent,
     equityHistory: game?.equityHistory ?? [],
+    netWorthHistory,
+    pendingOrders: game?.pendingOrders ?? [],
     positions: summary.views,
     tradeHistory: game?.tradeHistory ?? [],
     watchlist: game?.watchlist ?? [],
@@ -745,6 +907,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     closePosition,
     toggleWatchlist,
     resetAccount,
+    cancelOrder,
   };
 
   return <TradingContext.Provider value={value}>{children}</TradingContext.Provider>;

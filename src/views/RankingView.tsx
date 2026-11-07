@@ -4,14 +4,31 @@ import { useTrading } from '../context/TradingContext';
 import { GameSaveData, GameSummary } from '../types/market';
 import { formatCurrency, formatPercent, formatTimeAgo } from '../services/marketApi';
 import { fetchRanking, getJoinedIds } from '../services/gamesHubApi';
-import { fetchGame } from '../services/supabaseService';
-import { valuePosition } from '../lib/portfolio';
+import { fetchGame, RankingEntry } from '../services/supabaseService';
+import { equityValueAt, valuePosition } from '../lib/portfolio';
+import { SegmentedControl } from '../components/common/SegmentedControl';
+
+type RankPeriod = 'ALL' | '1M' | '1W';
+const PERIOD_DAYS: Record<RankPeriod, number> = { ALL: 0, '1M': 30, '1W': 7 };
+const PERIOD_LABEL: Record<RankPeriod, string> = { ALL: 'desde el inicio', '1M': 'en 30 días', '1W': 'en 7 días' };
+
+/** Rentabilidad de una partida en el periodo, con su histórico diario real. */
+function periodReturn(game: RankingEntry, period: RankPeriod, now: number): number {
+  let base = game.initialCash;
+  if (period !== 'ALL') {
+    const from = now - PERIOD_DAYS[period] * 24 * 60 * 60 * 1000;
+    const history = game.dailyHistory.filter((p) => p.t >= game.createdAt);
+    if (history.length > 0 && history[0].t <= from) base = equityValueAt(history, from);
+  }
+  return base > 0 ? ((game.totalNetWorth - base) / base) * 100 : 0;
+}
 import { JoinGameSheet } from '../components/common/JoinGameSheet';
 
 export const RankingView: React.FC = () => {
   const { activeGameId, switchGame, liveQuotes, fxRates, ensureQuotes } = useTrading();
 
-  const [games, setGames] = useState<GameSummary[]>([]);
+  const [games, setGames] = useState<RankingEntry[]>([]);
+  const [period, setPeriod] = useState<RankPeriod>('ALL');
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -41,23 +58,26 @@ export const RankingView: React.FC = () => {
     return () => clearInterval(interval);
   }, [load]);
 
-  const filtered = useMemo(() => {
-    const sorted = [...games].sort((a, b) => b.totalNetWorth - a.totalNetWorth);
-    const q = searchQuery.trim().toLowerCase();
-    return q ? sorted.filter((g) => g.name.toLowerCase().includes(q) || g.id.toLowerCase().includes(q)) : sorted;
-  }, [games, searchQuery]);
+  // Clasificación por rentabilidad (cada partida puede empezar con un capital distinto)
+  const ranked = useMemo(() => {
+    const now = Date.now();
+    return games
+      .map((g) => ({ ...g, periodPct: periodReturn(g, period, now) }))
+      .sort((a, b) => b.periodPct - a.periodPct);
+  }, [games, period]);
 
-  const rankOf = useMemo(() => {
-    const map = new Map<string, number>();
-    [...games].sort((a, b) => b.totalNetWorth - a.totalNetWorth).forEach((g, i) => map.set(g.id, i + 1));
-    return map;
-  }, [games]);
+  const rankOf = useMemo(() => new Map(ranked.map((g, i) => [g.id, i + 1])), [ranked]);
+
+  const filtered = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return q ? ranked.filter((g) => g.name.toLowerCase().includes(q) || g.id.toLowerCase().includes(q)) : ranked;
+  }, [ranked, searchQuery]);
 
   const handleInspect = async (summary: GameSummary) => {
     setActionError(null);
     setDetailTab('positions');
     setIsLoadingDetail(true);
-    setSelected({ ...summary, positions: [], tradeHistory: [], watchlist: [], equityHistory: [] });
+    setSelected({ ...summary, positions: [], tradeHistory: [], watchlist: [], equityHistory: [], pendingOrders: [], dailyHistory: [] });
     try {
       const res = await fetchGame(summary.id);
       if (res.status === 'ok') {
@@ -120,11 +140,22 @@ export const RankingView: React.FC = () => {
         </button>
       </div>
 
+      <SegmentedControl<RankPeriod>
+        options={[
+          { label: 'Total', value: 'ALL' },
+          { label: 'Mes', value: '1M' },
+          { label: 'Semana', value: '1W' },
+        ]}
+        value={period}
+        onChange={setPeriod}
+        size="sm"
+      />
+
       {/* Clasificación */}
       <div className="space-y-2">
         <div className="flex items-center justify-between px-1">
           <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">Clasificación ({filtered.length})</span>
-          <span className="text-[11px] text-zinc-400 font-medium">Por patrimonio</span>
+          <span className="text-[11px] text-zinc-400 font-medium">Rentabilidad {PERIOD_LABEL[period]}</span>
         </div>
 
         {isLoading && games.length === 0 ? (
@@ -140,7 +171,7 @@ export const RankingView: React.FC = () => {
             {filtered.map((game) => {
               const rank = rankOf.get(game.id) ?? 0;
               const isActive = game.id === activeGameId;
-              const isUp = game.totalPnLPercent >= 0;
+              const isUp = game.periodPct >= 0;
               return (
                 <button
                   key={game.id}
@@ -175,7 +206,7 @@ export const RankingView: React.FC = () => {
                     <div>
                       <span className="text-sm font-bold font-mono text-zinc-900 dark:text-zinc-50 block">{formatCurrency(game.totalNetWorth)}</span>
                       <span className={`text-[11px] font-mono font-bold ${isUp ? 'text-ios-green' : 'text-ios-red'}`}>
-                        {formatPercent(game.totalPnLPercent)}
+                        {formatPercent(game.periodPct)}
                       </span>
                     </div>
                     <ChevronRight className="w-4 h-4 text-zinc-300 dark:text-zinc-600 shrink-0" />
@@ -186,7 +217,7 @@ export const RankingView: React.FC = () => {
           </div>
         )}
         <p className="text-[10px] text-zinc-400 text-center px-4">
-          El patrimonio se actualiza cuando el jugador tiene la app abierta. La rentabilidad se mide sobre su capital inicial.
+          Ordenado por rentabilidad, porque cada partida puede empezar con un capital distinto. El patrimonio se actualiza cada día al cierre y cuando el jugador usa la app.
         </p>
       </div>
 

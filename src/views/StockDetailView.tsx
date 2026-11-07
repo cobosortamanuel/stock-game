@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ArrowLeft, Star, TrendingUp, TrendingDown, Loader2, Clock, ShieldAlert, RefreshCw } from 'lucide-react';
 import { StockQuote, ChartPoint, TimeRange, PositionType } from '../types/market';
-import { fetchStockData, formatCurrency, formatPercent } from '../services/marketApi';
+import { fetchStockData, formatCurrency, formatPercent, getMarketStatus, isAlwaysOpen } from '../services/marketApi';
 import { StockChart } from '../components/common/StockChart';
 import { TradeModal } from '../components/common/TradeModal';
 import { useTrading } from '../context/TradingContext';
 import { MarketStatusBadge } from '../components/common/MarketStatusBadge';
+import { ClosePositionControl } from '../components/common/ClosePositionControl';
 
 interface StockDetailViewProps {
   symbol: string;
@@ -16,9 +17,7 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
   symbol,
   onBack,
 }) => {
-  const { watchlist, toggleWatchlist, positions, closePosition, mergeQuote } = useTrading();
-  const [confirmCloseId, setConfirmCloseId] = useState<string | null>(null);
-  const [closeMessage, setCloseMessage] = useState<{ success: boolean; message: string } | null>(null);
+  const { watchlist, toggleWatchlist, positions, pendingOrders, closePosition, mergeQuote } = useTrading();
   const [timeRange, setTimeRange] = useState<TimeRange>('1D');
   const [quote, setQuote] = useState<StockQuote | null>(null);
   const [chartData, setChartData] = useState<ChartPoint[]>([]);
@@ -168,12 +167,6 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
             </span>
           </div>
 
-          {closeMessage && (
-            <div className={`p-3 rounded-xl text-xs font-medium ${closeMessage.success ? 'bg-ios-green/15 text-ios-green' : 'bg-ios-red/15 text-ios-red'}`}>
-              {closeMessage.message}
-            </div>
-          )}
-
           {userPositions.map((pos) => {
             const isLong = pos.type === 'LONG';
             const isProfitable = pos.unrealizedPnL >= 0;
@@ -223,7 +216,7 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
                 </div>
 
                 {/* 4-Grid of Key Details */}
-                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-black/5 dark:border-white/5 text-xs">
+                <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-black/5 dark:border-white/5 text-xs">
                   <div className="p-2.5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50">
                     <span className="text-[10px] text-zinc-400 uppercase font-medium block">
                       Entrada
@@ -253,7 +246,7 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
 
                   <div className="p-2.5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50">
                     <span className="text-[10px] text-zinc-400 uppercase font-medium block">
-                      Valor actual ({pos.shares.toFixed(4)} acc.)
+                      Valor ({pos.shares.toFixed(3)} acc.)
                     </span>
                     <span className="font-mono font-bold text-zinc-900 dark:text-zinc-100">
                       {formatCurrency(pos.currentValue)}
@@ -261,40 +254,12 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
                   </div>
                 </div>
 
-                {/* Cerrar posición (con confirmación) */}
-                {confirmCloseId === pos.id ? (
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCloseMessage(closePosition(pos.id));
-                        setConfirmCloseId(null);
-                      }}
-                      className="flex-1 py-2.5 rounded-2xl bg-ios-red text-white text-xs font-bold ios-active"
-                    >
-                      Confirmar: recibir {formatCurrency(pos.currentValue)}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setConfirmCloseId(null)}
-                      className="px-4 py-2.5 rounded-2xl bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-semibold ios-active"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCloseMessage(null);
-                      setConfirmCloseId(pos.id);
-                    }}
-                    disabled={!pos.hasPrice}
-                    className="w-full py-2.5 rounded-2xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-bold transition-all ios-active disabled:opacity-50"
-                  >
-                    Cerrar esta posición
-                  </button>
-                )}
+                <ClosePositionControl
+                  position={pos}
+                  marketClosed={!!quote && !isAlwaysOpen(quote) && getMarketStatus(quote) === 'CLOSED'}
+                  hasPendingClose={pendingOrders.some((o) => o.kind === 'CLOSE' && o.positionId === pos.id)}
+                  onClose={closePosition}
+                />
               </div>
             );
           })}
@@ -317,35 +282,35 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
             </div>
 
             <div className="flex items-center justify-between pb-2 border-b border-black/5 dark:border-white/5">
-              <span className="text-zinc-500 dark:text-zinc-400">Cierre Previo</span>
+              <span className="text-zinc-500 dark:text-zinc-400">Cierre ant.</span>
               <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
                 {quote.prevClose ? formatCurrency(quote.prevClose, quote.currency) : '-'}
               </span>
             </div>
 
             <div className="flex items-center justify-between pb-2 border-b border-black/5 dark:border-white/5">
-              <span className="text-zinc-500 dark:text-zinc-400">Máx del Día</span>
+              <span className="text-zinc-500 dark:text-zinc-400">Máx. día</span>
               <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
                 {quote.high ? formatCurrency(quote.high, quote.currency) : '-'}
               </span>
             </div>
 
             <div className="flex items-center justify-between pb-2 border-b border-black/5 dark:border-white/5">
-              <span className="text-zinc-500 dark:text-zinc-400">Mín del Día</span>
+              <span className="text-zinc-500 dark:text-zinc-400">Mín. día</span>
               <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
                 {quote.low ? formatCurrency(quote.low, quote.currency) : '-'}
               </span>
             </div>
 
             <div className="flex items-center justify-between pb-2 border-b border-black/5 dark:border-white/5">
-              <span className="text-zinc-500 dark:text-zinc-400">Máx 52 Semanas</span>
+              <span className="text-zinc-500 dark:text-zinc-400">Máx. 52 sem.</span>
               <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
                 {quote.week52High ? formatCurrency(quote.week52High, quote.currency) : '-'}
               </span>
             </div>
 
             <div className="flex items-center justify-between pb-2 border-b border-black/5 dark:border-white/5">
-              <span className="text-zinc-500 dark:text-zinc-400">Mín 52 Semanas</span>
+              <span className="text-zinc-500 dark:text-zinc-400">Mín. 52 sem.</span>
               <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
                 {quote.week52Low ? formatCurrency(quote.week52Low, quote.currency) : '-'}
               </span>
@@ -359,7 +324,7 @@ export const StockDetailView: React.FC<StockDetailViewProps> = ({
             </div>
 
             <div className="flex items-center justify-between">
-              <span className="text-zinc-500 dark:text-zinc-400">Cap. de Mercado</span>
+              <span className="text-zinc-500 dark:text-zinc-400">Capitalización</span>
               <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
                 {quote.marketCap || 'N/A'}
               </span>

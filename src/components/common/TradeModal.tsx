@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, TrendingUp, TrendingDown, ShieldAlert, CheckCircle2 } from 'lucide-react';
 import { StockQuote, PositionType } from '../../types/market';
 import { useTrading } from '../../context/TradingContext';
-import { formatCurrency, formatPercent, getMarketStatus } from '../../services/marketApi';
+import { formatCurrency, formatPercent, getMarketStatus, isAlwaysOpen } from '../../services/marketApi';
 import { getFxRate } from '../../lib/portfolio';
 
 interface TradeModalProps {
@@ -38,14 +38,14 @@ export const TradeModal: React.FC<TradeModalProps> = ({
   const quote = live && live.fetchedAt > (initialQuote.fetchedAt || 0) ? live : initialQuote;
   const fx = getFxRate(quote.currency, fxRates);
   const isForeign = quote.currency !== 'USD';
-  const isClosed = getMarketStatus(quote) === 'CLOSED';
+  const isClosed = !isAlwaysOpen(quote) && getMarketStatus(quote) === 'CLOSED';
 
   if (!isOpen) return null;
 
   const numAmount = parseFloat(amount) || 0;
   const price = quote.price;
   const estimatedShares = numAmount > 0 && fx ? numAmount / (price * fx) : 0;
-  const isAffordable = numAmount > 0 && numAmount <= cashAvailable + 0.005 && !!fx;
+  const isAffordable = numAmount > 0 && numAmount <= cashAvailable + 0.005 && (!!fx || isClosed);
 
   const handlePercentageSelect = (pct: number) => {
     const calculated = (cashAvailable * pct) / 100;
@@ -204,7 +204,7 @@ export const TradeModal: React.FC<TradeModalProps> = ({
           </div>
 
           <div className="flex items-center justify-between">
-            <span className="text-zinc-500 dark:text-zinc-400">Precio de ejecución:</span>
+            <span className="text-zinc-500 dark:text-zinc-400">{isClosed ? 'Último cierre (orientativo):' : 'Precio de ejecución:'}</span>
             <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
               {formatCurrency(price, quote.currency)}
             </span>
@@ -229,7 +229,7 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 
         {isClosed && (
           <div className="mt-3 p-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800/80 text-[11px] text-zinc-500 dark:text-zinc-400">
-            El mercado de este valor está cerrado: la operación se hará al último precio de cierre.
+            El mercado de este valor está cerrado. Tu orden se ejecutará al <strong>precio de apertura</strong> del próximo día de mercado; el dinero queda reservado hasta entonces y puedes cancelarla desde Portafolio.
           </div>
         )}
 
@@ -263,8 +263,10 @@ export const TradeModal: React.FC<TradeModalProps> = ({
           >
             {numAmount > cashAvailable + 0.005
               ? 'Saldo insuficiente'
-              : !fx
+              : !fx && !isClosed
               ? 'Cargando tipo de cambio…'
+              : isClosed
+              ? `Programar ${positionType === 'LONG' ? 'compra' : 'venta en corto'} · ${formatCurrency(numAmount)}`
               : positionType === 'LONG'
               ? `Comprar por ${formatCurrency(numAmount)}`
               : `Vender en corto por ${formatCurrency(numAmount)}`}

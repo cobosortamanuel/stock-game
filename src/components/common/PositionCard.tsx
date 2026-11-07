@@ -1,104 +1,94 @@
-import React, { useState } from 'react';
-import { ArrowDownRight, ArrowUpRight, BarChart2, X } from 'lucide-react';
+import React from 'react';
+import { ArrowDownRight, ArrowUpRight, BarChart2 } from 'lucide-react';
 import { PositionView, StockQuote } from '../../types/market';
-import { formatCurrency, formatPercent, getMarketStatus } from '../../services/marketApi';
+import { formatCurrency, formatPercent, getMarketStatus, isAlwaysOpen } from '../../services/marketApi';
 import { MarketStatusBadge } from './MarketStatusBadge';
+import { ClosePositionControl } from './ClosePositionControl';
 
 interface PositionCardProps {
   position: PositionView;
   quote?: StockQuote;
-  onClose: (positionId: string) => { success: boolean; message: string } | void;
+  hasPendingClose: boolean;
+  onClose: (positionId: string, percentage: number) => { success: boolean; message: string };
   onSelectSymbol: (symbol: string) => void;
 }
 
-export const PositionCard: React.FC<PositionCardProps> = ({ position, quote, onClose, onSelectSymbol }) => {
-  const [isConfirmingClose, setIsConfirmingClose] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+const Stat: React.FC<{ label: string; value: string; strong?: boolean }> = ({ label, value, strong }) => (
+  <div className="min-w-0">
+    <span className="text-[10px] text-zinc-400 uppercase tracking-wide block font-medium">{label}</span>
+    <span
+      className={`text-[13px] font-mono block truncate ${
+        strong ? 'font-semibold text-zinc-800 dark:text-zinc-200' : 'text-zinc-600 dark:text-zinc-400'
+      }`}
+    >
+      {value}
+    </span>
+  </div>
+);
 
+export const PositionCard: React.FC<PositionCardProps> = ({ position, quote, hasPendingClose, onClose, onSelectSymbol }) => {
   const isLong = position.type === 'LONG';
   const isProfitable = position.unrealizedPnL >= 0;
   const isDayUp = position.dayPnL >= 0;
   const currency = position.currency || 'USD';
-
-  const handleClose = () => {
-    const res = onClose(position.id);
-    if (res && !res.success) setError(res.message);
-    setIsConfirmingClose(false);
-  };
+  const marketClosed = !!quote && !isAlwaysOpen(quote) && getMarketStatus(quote) === 'CLOSED';
 
   return (
-    <div className="bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-900 dark:to-zinc-950 rounded-3xl p-4 border border-black/5 dark:border-white/10 shadow-ios-sm transition-all duration-200">
+    <div className="bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-900 dark:to-zinc-950 rounded-3xl p-4 border border-black/5 dark:border-white/10 shadow-ios-sm">
       {/* Cabecera */}
-      <div className="flex items-start justify-between">
-        <button type="button" onClick={() => onSelectSymbol(position.symbol)} className="flex items-center gap-3 text-left flex-1 min-w-0 group mr-2">
-          <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center font-bold text-xs text-zinc-800 dark:text-zinc-200 border border-black/5 dark:border-white/5 group-hover:border-ios-blue transition-colors shrink-0">
-            {position.symbol.substring(0, 4)}
+      <div className="flex items-start justify-between gap-2">
+        <button type="button" onClick={() => onSelectSymbol(position.symbol)} className="flex items-center gap-3 text-left flex-1 min-w-0 group">
+          <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center font-bold text-[11px] text-zinc-800 dark:text-zinc-200 border border-black/5 dark:border-white/5 group-hover:border-ios-blue transition-colors shrink-0">
+            {position.symbol.replace(/[-.=^].*$/, '').substring(0, 4)}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="font-bold text-base text-zinc-900 dark:text-zinc-50 leading-tight shrink-0">{position.symbol}</span>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="font-bold text-[15px] text-zinc-900 dark:text-zinc-50 leading-tight truncate">{position.symbol}</span>
               <span
-                className={`px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase shrink-0 ${
-                  isLong ? 'bg-ios-green/15 text-ios-green border border-ios-green/30' : 'bg-ios-orange/15 text-ios-orange border border-ios-orange/30'
+                className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase shrink-0 ${
+                  isLong ? 'bg-ios-green/15 text-ios-green' : 'bg-ios-orange/15 text-ios-orange'
                 }`}
               >
                 {isLong ? 'Largo' : 'Corto'}
               </span>
             </div>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate block w-full mt-0.5">{position.name}</p>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate mt-0.5">{position.name}</p>
           </div>
         </button>
 
         <div className="text-right shrink-0">
           {position.hasPrice ? (
             <>
-              <div className={`flex items-center justify-end font-mono font-bold text-sm sm:text-base ${isProfitable ? 'text-ios-green' : 'text-ios-red'}`}>
-                {isProfitable ? <ArrowUpRight className="w-4 h-4 mr-0.5 stroke-[2.5]" /> : <ArrowDownRight className="w-4 h-4 mr-0.5 stroke-[2.5]" />}
+              <div className={`flex items-center justify-end font-mono font-bold text-sm ${isProfitable ? 'text-ios-green' : 'text-ios-red'}`}>
+                {isProfitable ? <ArrowUpRight className="w-3.5 h-3.5 stroke-[2.5]" /> : <ArrowDownRight className="w-3.5 h-3.5 stroke-[2.5]" />}
                 {isProfitable ? '+' : ''}
                 {formatCurrency(position.unrealizedPnL)}
               </div>
-              <div className={`text-xs font-semibold ${isProfitable ? 'text-ios-green' : 'text-ios-red'}`}>
+              <div className={`text-xs font-semibold font-mono ${isProfitable ? 'text-ios-green' : 'text-ios-red'}`}>
                 {formatPercent(position.unrealizedPnLPercent)}
               </div>
             </>
           ) : (
-            <div className="text-xs font-semibold text-zinc-400">Cargando precio…</div>
+            <div className="text-xs font-semibold text-zinc-400">Cargando…</div>
           )}
         </div>
       </div>
 
-      {/* Datos */}
-      <div className="mt-3.5 pt-3 border-t border-black/5 dark:border-white/5 grid grid-cols-3 gap-2 text-left">
-        <div className="min-w-0">
-          <span className="text-[10px] text-zinc-400 uppercase tracking-wider block font-medium">Invertido</span>
-          <span className="text-xs sm:text-sm font-semibold font-mono text-zinc-800 dark:text-zinc-200 block truncate">
-            {formatCurrency(position.investedAmount)}
-          </span>
-        </div>
-        <div className="min-w-0">
-          <span className="text-[10px] text-zinc-400 uppercase tracking-wider block font-medium">Valor actual</span>
-          <span className="text-xs sm:text-sm font-semibold font-mono text-zinc-800 dark:text-zinc-200 block truncate">
-            {formatCurrency(position.currentValue)}
-          </span>
-        </div>
-        <div className="text-right min-w-0">
-          <span className="text-[10px] text-zinc-400 uppercase tracking-wider block font-medium">Entrada → Ahora</span>
-          <span className="text-[11px] font-mono text-zinc-600 dark:text-zinc-400 block truncate">
-            {formatCurrency(position.entryPrice, currency)}
-          </span>
-          <span className="text-[11px] font-mono font-semibold text-zinc-800 dark:text-zinc-200 block truncate">
-            {position.hasPrice ? formatCurrency(position.currentPrice, currency) : '—'}
-          </span>
-        </div>
+      {/* Datos (2 x 2) */}
+      <div className="mt-3 pt-3 border-t border-black/5 dark:border-white/5 grid grid-cols-2 gap-x-3 gap-y-2">
+        <Stat label="Invertido" value={formatCurrency(position.investedAmount)} strong />
+        <Stat label="Valor actual" value={formatCurrency(position.currentValue)} strong />
+        <Stat label="Entrada" value={formatCurrency(position.entryPrice, currency)} />
+        <Stat label="Precio actual" value={position.hasPrice ? formatCurrency(position.currentPrice, currency) : '—'} />
       </div>
 
-      {/* Hoy + estado del mercado */}
-      <div className="mt-3 pt-2.5 border-t border-black/5 dark:border-white/5 flex items-center justify-between">
+      {/* Estado del mercado + cambio del día */}
+      <div className="mt-3 pt-2.5 border-t border-black/5 dark:border-white/5 flex items-center justify-between gap-2">
         <MarketStatusBadge quote={quote} compact />
         {position.hasPrice && (
-          <span className="text-[11px] font-mono font-medium">
-            <span className="text-zinc-400 font-sans mr-1">{quote && getMarketStatus(quote) === 'CLOSED' ? 'Última sesión' : 'Hoy'}</span>
-            <span className={isDayUp ? 'text-ios-green font-semibold' : 'text-ios-red font-semibold'}>
+          <span className="text-[11px] font-mono whitespace-nowrap">
+            <span className="text-zinc-400 font-sans mr-1">{marketClosed ? 'Última sesión' : 'Hoy'}</span>
+            <span className={`font-semibold ${isDayUp ? 'text-ios-green' : 'text-ios-red'}`}>
               {isDayUp ? '+' : ''}
               {formatCurrency(position.dayPnL)}
             </span>
@@ -106,46 +96,24 @@ export const PositionCard: React.FC<PositionCardProps> = ({ position, quote, onC
         )}
       </div>
 
-      {error && <div className="mt-2 p-2 bg-red-500/10 text-ios-red text-[11px] rounded-xl font-medium">{error}</div>}
-
       {/* Acciones */}
-      <div className="mt-3 pt-2.5 border-t border-black/5 dark:border-white/5 flex items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={() => onSelectSymbol(position.symbol)}
-          className="flex-1 py-2 px-3 rounded-xl bg-zinc-100 dark:bg-zinc-800/80 text-zinc-800 dark:text-zinc-200 text-xs font-semibold flex items-center justify-center gap-1.5 ios-active"
-        >
-          <BarChart2 className="w-3.5 h-3.5" />
-          Ver gráfica
-        </button>
-
-        {isConfirmingClose ? (
-          <div className="flex-1 flex items-center gap-1">
-            <button type="button" onClick={handleClose} className="flex-1 py-2 px-2 rounded-xl bg-ios-red text-white text-xs font-bold shadow-sm ios-active">
-              Cerrar por {formatCurrency(position.currentValue)}
-            </button>
+      <div className="mt-3 pt-2.5 border-t border-black/5 dark:border-white/5">
+        <ClosePositionControl
+          position={position}
+          marketClosed={marketClosed}
+          hasPendingClose={hasPendingClose}
+          onClose={onClose}
+          leading={
             <button
               type="button"
-              onClick={() => setIsConfirmingClose(false)}
-              className="py-2 px-2.5 rounded-xl bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-semibold ios-active"
-              aria-label="Cancelar"
+              onClick={() => onSelectSymbol(position.symbol)}
+              className="py-2 px-3 rounded-xl bg-zinc-100 dark:bg-zinc-800/80 text-zinc-800 dark:text-zinc-200 text-xs font-semibold flex items-center justify-center gap-1.5 ios-active shrink-0"
             >
-              <X className="w-3.5 h-3.5" />
+              <BarChart2 className="w-3.5 h-3.5" />
+              Gráfica
             </button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => {
-              setError(null);
-              setIsConfirmingClose(true);
-            }}
-            disabled={!position.hasPrice}
-            className="flex-1 py-2 px-3 rounded-xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-semibold flex items-center justify-center gap-1 ios-active shadow-sm disabled:opacity-50"
-          >
-            Cerrar posición
-          </button>
-        )}
+          }
+        />
       </div>
     </div>
   );

@@ -1,40 +1,163 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, RefreshCw, Search, Star } from 'lucide-react';
+import { Check, ChevronDown, Loader2, Search, Star } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { StockQuote } from '../types/market';
 import { fetchScreener, formatCurrency, formatPercent, MARKET_CATEGORIES, POPULAR_SYMBOLS } from '../services/marketApi';
-import { SegmentedControl } from '../components/common/SegmentedControl';
+import { getFxRate } from '../lib/portfolio';
 
 interface MarketsViewProps {
   onSelectSymbol: (symbol: string) => void;
   onOpenSearch: () => void;
 }
 
-type Mode = 'live' | 'catalog';
+// ---------------------------------------------------------------------
+// Filtros
+// ---------------------------------------------------------------------
 
-/** Listas reales de Yahoo Finance (se actualizan con el mercado) */
-const LIVE_LISTS: { id: string; label: string }[] = [
-  { id: 'most_actives', label: 'EE. UU. · Más negociadas' },
-  { id: 'day_gainers', label: 'EE. UU. · Suben' },
-  { id: 'day_losers', label: 'EE. UU. · Bajan' },
-  { id: 'most_actives_europe', label: 'Europa · Más negociadas' },
-  { id: 'day_gainers_europe', label: 'Europa · Suben' },
-  { id: 'day_losers_europe', label: 'Europa · Bajan' },
-  { id: 'most_actives_asia', label: 'Asia · Más negociadas' },
-  { id: 'day_gainers_asia', label: 'Asia · Suben' },
-  { id: 'day_losers_asia', label: 'Asia · Bajan' },
-  { id: 'most_actives_ca', label: 'Canadá · Más negociadas' },
-  { id: 'day_gainers_au', label: 'Australia · Suben' },
-  { id: 'all_cryptocurrencies_us', label: 'Criptomonedas' },
-  { id: 'top_etfs_us', label: 'ETFs' },
-  { id: 'growth_technology_stocks', label: 'Tecnológicas en crecimiento' },
-  { id: 'undervalued_growth_stocks', label: 'Crecimiento infravaloradas' },
-  { id: 'small_cap_gainers', label: 'Pequeñas con impulso' },
-  { id: 'most_shorted_stocks', label: 'Más vendidas en corto' },
+type Region = 'ALL' | 'US' | 'EU' | 'ASIA' | 'AMER';
+type SortOrder = 'DEFAULT' | 'VOLUME' | 'GAINERS' | 'LOSERS';
+
+const REGIONS: { id: Region; label: string }[] = [
+  { id: 'ALL', label: 'Todas las regiones' },
+  { id: 'US', label: 'EE. UU.' },
+  { id: 'EU', label: 'Europa' },
+  { id: 'ASIA', label: 'Asia-Pacífico' },
+  { id: 'AMER', label: 'Canadá y Latinoamérica' },
 ];
 
-const PAGE_SIZE = 50;
-const CATALOG_PAGE = 25;
+const ORDERS: { id: SortOrder; label: string }[] = [
+  { id: 'DEFAULT', label: 'Destacadas' },
+  { id: 'VOLUME', label: 'Más negociadas' },
+  { id: 'GAINERS', label: 'Suben hoy' },
+  { id: 'LOSERS', label: 'Bajan hoy' },
+];
+
+const SECTOR_SHORT: Record<string, string> = {
+  ALL: 'Todo',
+  TECH: 'Tecnología',
+  CONSUMER: 'Consumo',
+  GAMING: 'Videojuegos',
+  CRYPTO: 'Cripto',
+  AUTO: 'Motor',
+  MEDIA: 'Medios',
+  BANKING: 'Banca',
+  ENERGY: 'Energía',
+  INDICES: 'ETFs e índices',
+};
+
+const EU_SUFFIXES = ['MC', 'PA', 'DE', 'L', 'MI', 'AS', 'SW', 'ST', 'HE', 'WA', 'BR', 'LS', 'CO', 'OL', 'IR', 'VI', 'IS', 'AT', 'PR', 'BD'];
+const ASIA_SUFFIXES = ['T', 'HK', 'KS', 'KQ', 'SS', 'SZ', 'TW', 'TWO', 'AX', 'NS', 'BO', 'JK', 'SI', 'KL', 'BK', 'NZ', 'XA'];
+const AMER_SUFFIXES = ['TO', 'V', 'CN', 'NE', 'SA', 'MX', 'BA', 'SN', 'LIM'];
+
+/** Región de un símbolo de Yahoo según su sufijo de bolsa ("" = EE. UU.). Cripto: todas. */
+function regionOf(symbol: string): Region | 'GLOBAL' {
+  if (/-(USD|EUR|USDT)$/.test(symbol)) return 'GLOBAL';
+  const m = /\.([A-Z]+)$/.exec(symbol);
+  if (!m) return 'US';
+  if (EU_SUFFIXES.includes(m[1])) return 'EU';
+  if (ASIA_SUFFIXES.includes(m[1])) return 'ASIA';
+  if (AMER_SUFFIXES.includes(m[1])) return 'AMER';
+  return 'US';
+}
+
+const matchesRegion = (symbol: string, region: Region) => {
+  if (region === 'ALL') return true;
+  const r = regionOf(symbol);
+  return r === 'GLOBAL' || r === region;
+};
+
+/** Listas reales de Yahoo que amplían lo que se ve */
+function screenersFor(region: Region, order: SortOrder, sector: string): string[] {
+  if (sector === 'CRYPTO') return ['all_cryptocurrencies_us'];
+  if (sector === 'INDICES') return ['top_etfs_us'];
+  if (sector !== 'ALL' || order === 'DEFAULT') return [];
+  const byRegion: Record<Exclude<Region, 'ALL'>, Partial<Record<SortOrder, string[]>>> = {
+    US: { VOLUME: ['most_actives'], GAINERS: ['day_gainers'], LOSERS: ['day_losers'] },
+    EU: { VOLUME: ['most_actives_europe'], GAINERS: ['day_gainers_europe'], LOSERS: ['day_losers_europe'] },
+    ASIA: { VOLUME: ['most_actives_asia'], GAINERS: ['day_gainers_asia', 'day_gainers_au'], LOSERS: ['day_losers_asia'] },
+    AMER: { VOLUME: ['most_actives_ca'] },
+  };
+  const regions: Exclude<Region, 'ALL'>[] = region === 'ALL' ? ['US', 'EU', 'ASIA'] : [region];
+  return regions.flatMap((r) => byRegion[r][order] ?? []);
+}
+
+const PAGE = 30;
+
+// Bolsas alemanas secundarias que replican acciones extranjeras (p. ej. F8P.F = IREN, de EE. UU.)
+const MIRROR_VENUES = ['F', 'SG', 'BE', 'DU', 'HM', 'MU', 'HA'];
+
+/** Descarta de las listas de Yahoo las réplicas y los errores evidentes de datos (cambios > 500% en un día). */
+function isUsefulListQuote(q: StockQuote): boolean {
+  const suffix = /\.([A-Z]+)$/.exec(q.symbol)?.[1];
+  if (suffix && MIRROR_VENUES.includes(suffix)) return false;
+  return Math.abs(q.changePercent) <= 500;
+}
+
+// ---------------------------------------------------------------------
+// Componentes
+// ---------------------------------------------------------------------
+
+function Dropdown<T extends string>({
+  value,
+  options,
+  onChange,
+  prefix,
+}: {
+  value: T;
+  options: { id: T; label: string }[];
+  onChange: (v: T) => void;
+  prefix: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent | TouchEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('touchstart', onDown);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('touchstart', onDown);
+    };
+  }, [open]);
+
+  const current = options.find((o) => o.id === value);
+  return (
+    <div ref={ref} className="relative flex-1 min-w-0">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full px-3 py-2 rounded-2xl bg-white dark:bg-ios-card-dark border border-black/5 dark:border-white/10 shadow-ios-sm flex items-center justify-between gap-1 ios-active"
+      >
+        <span className="min-w-0 text-left">
+          <span className="block text-[9px] uppercase font-semibold text-zinc-400 leading-tight">{prefix}</span>
+          <span className="block text-xs font-bold text-zinc-900 dark:text-zinc-50 truncate">{current?.label}</span>
+        </span>
+        <ChevronDown className={`w-4 h-4 text-zinc-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute z-20 mt-1 left-0 right-0 min-w-[180px] bg-white dark:bg-zinc-900 rounded-2xl border border-black/10 dark:border-white/10 shadow-ios-sheet overflow-hidden animate-fadeIn">
+          {options.map((o) => (
+            <button
+              key={o.id}
+              type="button"
+              onClick={() => {
+                onChange(o.id);
+                setOpen(false);
+              }}
+              className="w-full px-3.5 py-2.5 text-left text-sm flex items-center justify-between hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-800 dark:text-zinc-100"
+            >
+              {o.label}
+              {o.id === value && <Check className="w-4 h-4 text-ios-blue" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface RowItem {
   symbol: string;
@@ -50,33 +173,31 @@ const StockRow = React.memo<{
   onToggleWatchlist: (symbol: string) => void;
 }>(({ item, quote, isFavorited, onSelect, onToggleWatchlist }) => {
   const isUp = (quote?.changePercent ?? 0) >= 0;
+  const tag = item.sector || quote?.exchange;
   return (
     <div
-      style={{ contentVisibility: 'auto', containIntrinsicSize: '72px' }}
-      className="w-full bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-900 dark:to-zinc-950 rounded-3xl p-3.5 border border-black/5 dark:border-white/10 flex items-center justify-between shadow-ios-sm hover:border-ios-blue/40 transition-all overflow-hidden"
+      style={{ contentVisibility: 'auto', containIntrinsicSize: '68px' }}
+      className="w-full bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-900 dark:to-zinc-950 rounded-3xl py-3 pl-3 pr-1.5 border border-black/5 dark:border-white/10 flex items-center shadow-ios-sm"
     >
-      <button type="button" onClick={() => onSelect(item.symbol)} className="flex items-center gap-3 text-left flex-1 min-w-0 group mr-2">
-        <div className="w-10 h-10 rounded-2xl bg-zinc-100 dark:bg-zinc-800/80 flex items-center justify-center font-bold text-[11px] text-zinc-800 dark:text-zinc-200 border border-black/5 dark:border-white/5 group-hover:border-ios-blue transition-colors shrink-0">
+      <button type="button" onClick={() => onSelect(item.symbol)} className="flex items-center gap-2.5 text-left flex-1 min-w-0">
+        <div className="w-10 h-10 rounded-2xl bg-zinc-100 dark:bg-zinc-800/80 flex items-center justify-center font-bold text-[11px] text-zinc-800 dark:text-zinc-200 border border-black/5 dark:border-white/5 shrink-0">
           {item.symbol.replace(/[-.=^].*$/, '').substring(0, 4)}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
-            <span className="font-bold text-sm text-zinc-900 dark:text-zinc-50 shrink-0">{item.symbol}</span>
-            {(item.sector || quote?.exchange) && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-500 font-medium truncate max-w-[120px] sm:max-w-[160px]">
-                {item.sector || quote?.exchange}
+            <span className="font-bold text-sm text-zinc-900 dark:text-zinc-50 truncate">{item.symbol}</span>
+            {tag && (
+              <span className="hidden min-[400px]:inline text-[10px] px-1.5 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-500 font-medium truncate max-w-[110px]">
+                {tag}
               </span>
             )}
           </div>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate block w-full mt-0.5">{quote?.name || item.name}</p>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate mt-0.5">{quote?.name || item.name}</p>
         </div>
-      </button>
-
-      <div className="flex items-center gap-2.5 shrink-0 pl-1">
-        <button type="button" onClick={() => onSelect(item.symbol)} className="text-right">
+        <div className="text-right shrink-0 pl-1">
           {quote ? (
             <>
-              <div className="font-mono font-bold text-sm text-zinc-900 dark:text-zinc-50 whitespace-nowrap">
+              <div className="font-mono font-bold text-[13px] text-zinc-900 dark:text-zinc-50 whitespace-nowrap">
                 {formatCurrency(quote.price, quote.currency)}
               </div>
               <div className={`font-mono font-semibold text-xs whitespace-nowrap ${isUp ? 'text-ios-green' : 'text-ios-red'}`}>
@@ -85,147 +206,156 @@ const StockRow = React.memo<{
             </>
           ) : (
             <div className="space-y-1.5 flex flex-col items-end">
-              <div className="h-3.5 w-16 rounded bg-zinc-200 dark:bg-zinc-800 animate-pulse" />
-              <div className="h-3 w-10 rounded bg-zinc-200 dark:bg-zinc-800 animate-pulse" />
+              <div className="h-3.5 w-14 rounded bg-zinc-200 dark:bg-zinc-800 animate-pulse" />
+              <div className="h-3 w-9 rounded bg-zinc-200 dark:bg-zinc-800 animate-pulse" />
             </div>
           )}
-        </button>
-        <button type="button" onClick={() => onToggleWatchlist(item.symbol)} className="p-1.5 ios-active shrink-0" aria-label="Favorito">
-          <Star className={`w-4 h-4 ${isFavorited ? 'fill-amber-400 text-amber-400' : 'text-zinc-300 dark:text-zinc-600'}`} />
-        </button>
-      </div>
+        </div>
+      </button>
+      <button type="button" onClick={() => onToggleWatchlist(item.symbol)} className="p-2 ios-active shrink-0" aria-label="Favorito">
+        <Star className={`w-4 h-4 ${isFavorited ? 'fill-amber-400 text-amber-400' : 'text-zinc-300 dark:text-zinc-600'}`} />
+      </button>
     </div>
   );
 });
 
+// ---------------------------------------------------------------------
+// Vista
+// ---------------------------------------------------------------------
+
 export const MarketsView: React.FC<MarketsViewProps> = ({ onSelectSymbol, onOpenSearch }) => {
-  const { liveQuotes, watchlist, toggleWatchlist, ensureQuotes, mergeQuotes } = useTrading();
-  const [mode, setMode] = useState<Mode>('live');
+  const { liveQuotes, fxRates, watchlist, toggleWatchlist, ensureQuotes, mergeQuotes } = useTrading();
+  const [region, setRegion] = useState<Region>('ALL');
+  const [order, setOrder] = useState<SortOrder>('DEFAULT');
+  const [sector, setSector] = useState('ALL');
   const [onlyFavorites, setOnlyFavorites] = useState(false);
+  const [visible, setVisible] = useState(PAGE);
 
-  // ---------------- Listas en vivo ----------------
-  const [listId, setListId] = useState(LIVE_LISTS[0].id);
-  const [listItems, setListItems] = useState<RowItem[]>([]);
-  const [listTotal, setListTotal] = useState(0);
-  const [listLoading, setListLoading] = useState(false);
-  const [listError, setListError] = useState(false);
-  const loadedCountRef = useRef(0);
+  // Listas de Yahoo cargadas: id -> símbolos
+  const [screenerRows, setScreenerRows] = useState<Record<string, RowItem[]>>({});
+  const [loadingScreeners, setLoadingScreeners] = useState(false);
 
-  const loadList = useCallback(
-    async (id: string, start: number, count: number, replace: boolean) => {
-      setListLoading(true);
-      setListError(false);
+  const screenerIds = useMemo(() => screenersFor(region, order, sector), [region, order, sector]);
+  const screenerKey = screenerIds.join(',');
+
+  const loadScreeners = useCallback(
+    async (ids: string[]) => {
+      if (ids.length === 0) return;
+      setLoadingScreeners(true);
       try {
-        const res = await fetchScreener(id, start, count);
-        if (!res) {
-          if (replace) setListItems([]);
-          setListError(true);
-          return;
-        }
-        mergeQuotes(res.quotes);
-        const rows = res.quotes.map((q) => ({ symbol: q.symbol, name: q.name }));
-        setListTotal(res.total);
-        setListItems((prev) => {
-          const next = replace ? rows : [...prev, ...rows.filter((r) => !prev.some((p) => p.symbol === r.symbol))];
-          loadedCountRef.current = next.length;
-          return next;
+        const results = await Promise.all(ids.map((id) => fetchScreener(id, 0, 100).then((r) => [id, r] as const)));
+        const allQuotes: StockQuote[] = [];
+        const next: Record<string, RowItem[]> = {};
+        results.forEach(([id, r]) => {
+          if (!r) return;
+          const useful = r.quotes.filter(isUsefulListQuote);
+          allQuotes.push(...useful);
+          next[id] = useful.map((q) => ({ symbol: q.symbol, name: q.name }));
         });
+        mergeQuotes(allQuotes);
+        setScreenerRows((prev) => ({ ...prev, ...next }));
       } finally {
-        setListLoading(false);
+        setLoadingScreeners(false);
       }
     },
     [mergeQuotes]
   );
 
   useEffect(() => {
-    if (mode !== 'live' || onlyFavorites) return;
-    setListItems([]);
-    loadedCountRef.current = 0;
-    loadList(listId, 0, PAGE_SIZE, true);
-    // Actualizar los precios de la lista cada minuto
+    if (onlyFavorites || !screenerKey) return;
+    const ids = screenerKey.split(',');
+    loadScreeners(ids);
     const interval = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        loadList(listId, 0, Math.min(100, Math.max(PAGE_SIZE, loadedCountRef.current)), true);
-      }
+      if (document.visibilityState === 'visible') loadScreeners(ids);
     }, 60_000);
     return () => clearInterval(interval);
-  }, [mode, listId, onlyFavorites, loadList]);
+  }, [screenerKey, onlyFavorites, loadScreeners]);
 
-  // ---------------- Catálogo ----------------
-  const [category, setCategory] = useState('ALL');
-  const [visibleCount, setVisibleCount] = useState(CATALOG_PAGE);
-  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => setVisible(PAGE), [region, order, sector, onlyFavorites]);
 
-  const catalogItems = useMemo<RowItem[]>(() => {
-    return POPULAR_SYMBOLS.filter((s) => category === 'ALL' || s.category === category).map((s) => ({
-      symbol: s.symbol,
-      name: s.name,
-      sector: s.sector,
-    }));
-  }, [category]);
+  // Catálogo filtrado por región y sector
+  const catalogRows = useMemo<RowItem[]>(
+    () =>
+      POPULAR_SYMBOLS.filter((s) => (sector === 'ALL' || s.category === sector) && matchesRegion(s.symbol, region)).map((s) => ({
+        symbol: s.symbol,
+        name: s.name,
+        sector: s.sector,
+      })),
+    [sector, region]
+  );
 
-  const favoriteItems = useMemo<RowItem[]>(() => {
+  // Todo lo que corresponde a los filtros: catálogo + listas de Yahoo
+  const allRows = useMemo<RowItem[]>(() => {
+    const seen = new Set<string>();
+    const out: RowItem[] = [];
+    const push = (r: RowItem) => {
+      if (seen.has(r.symbol) || !matchesRegion(r.symbol, region)) return;
+      seen.add(r.symbol);
+      out.push(r);
+    };
+    catalogRows.forEach(push);
+    screenerIds.forEach((id) => (screenerRows[id] || []).forEach(push));
+    return out;
+  }, [catalogRows, screenerIds, screenerRows, region]);
+
+  // Ordenar con datos reales; sin cotización, al final
+  const sortedRows = useMemo<RowItem[]>(() => {
+    if (order === 'DEFAULT') return allRows;
+    const score = (r: RowItem): number | null => {
+      const q = liveQuotes[r.symbol];
+      if (!q) return null;
+      if (order === 'GAINERS') return q.changePercent;
+      if (order === 'LOSERS') return -q.changePercent;
+      // Más negociadas: volumen en dólares (comparable entre bolsas y divisas)
+      const fx = getFxRate(q.currency, fxRates);
+      return q.volumeRaw && fx ? q.volumeRaw * q.price * fx : null;
+    };
+    return [...allRows]
+      .map((r) => ({ r, s: score(r) }))
+      .sort((a, b) => (b.s ?? -Infinity) - (a.s ?? -Infinity))
+      .map((x) => x.r);
+  }, [allRows, order, liveQuotes, fxRates]);
+
+  const favoriteRows = useMemo<RowItem[]>(() => {
     const catalog = new Map(POPULAR_SYMBOLS.map((s) => [s.symbol, s]));
-    return watchlist.map((sym) => ({
-      symbol: sym,
-      name: catalog.get(sym)?.name || liveQuotes[sym]?.name || sym,
-      sector: catalog.get(sym)?.sector,
-    }));
+    return watchlist.map((sym) => ({ symbol: sym, name: catalog.get(sym)?.name || liveQuotes[sym]?.name || sym, sector: catalog.get(sym)?.sector }));
   }, [watchlist, liveQuotes]);
 
-  useEffect(() => setVisibleCount(CATALOG_PAGE), [category, onlyFavorites, mode]);
+  const rows = onlyFavorites ? favoriteRows : sortedRows.slice(0, visible);
 
-  const rows: RowItem[] = onlyFavorites ? favoriteItems : mode === 'live' ? listItems : catalogItems.slice(0, visibleCount);
-
-  // Pedir las cotizaciones de lo que está en pantalla (catálogo y favoritos)
-  const visibleKey = onlyFavorites || mode === 'catalog' ? rows.map((r) => r.symbol).join(',') : '';
+  // Cotizaciones: para ordenar hacen falta las de todo el conjunto; si no, sólo las visibles
+  const neededKey = (onlyFavorites ? favoriteRows : order === 'DEFAULT' ? rows : allRows).map((r) => r.symbol).join(',');
   useEffect(() => {
-    if (!visibleKey) return;
-    const symbols = visibleKey.split(',');
+    if (!neededKey) return;
+    const symbols = neededKey.split(',');
     ensureQuotes(symbols, 60_000);
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible') ensureQuotes(symbols, 60_000);
     }, 60_000);
     return () => clearInterval(interval);
-  }, [visibleKey, ensureQuotes]);
+  }, [neededKey, ensureQuotes]);
 
-  // Carga progresiva del catálogo
-  useEffect(() => {
-    if (mode !== 'catalog' || onlyFavorites) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) setVisibleCount((prev) => Math.min(prev + CATALOG_PAGE, catalogItems.length));
-      },
-      { rootMargin: '300px' }
-    );
-    if (loadMoreRef.current) observer.observe(loadMoreRef.current);
-    return () => observer.disconnect();
-  }, [mode, onlyFavorites, catalogItems.length, visibleCount]);
-
-  const chips = mode === 'live' ? LIVE_LISTS : MARKET_CATEGORIES;
-  const selectedChip = mode === 'live' ? listId : category;
+  const total = onlyFavorites ? favoriteRows.length : sortedRows.length;
 
   return (
-    <div className="space-y-4 pb-20 max-w-md mx-auto px-4 pt-2">
+    <div className="space-y-3 pb-24 max-w-md mx-auto px-4 pt-2">
       {/* Buscador + favoritos */}
       <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={onOpenSearch}
-          className="flex-1 p-3.5 rounded-3xl bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-900 dark:to-zinc-950 border border-black/5 dark:border-white/10 flex items-center justify-between text-zinc-400 text-sm shadow-ios-sm ios-active"
+          className="flex-1 min-w-0 px-3.5 py-3 rounded-3xl bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-900 dark:to-zinc-950 border border-black/5 dark:border-white/10 flex items-center gap-2.5 text-zinc-400 text-sm shadow-ios-sm ios-active"
         >
-          <div className="flex items-center gap-2.5">
-            <Search className="w-4 h-4 text-zinc-400" />
-            <span>Buscar en todas las bolsas...</span>
-          </div>
+          <Search className="w-4 h-4 shrink-0" />
+          <span className="truncate">Buscar en todas las bolsas…</span>
         </button>
         <button
           type="button"
-          onClick={() => setOnlyFavorites((prev) => !prev)}
-          className={`p-3.5 rounded-3xl border transition-all shadow-ios-sm ios-active flex items-center justify-center shrink-0 ${
+          onClick={() => setOnlyFavorites((v) => !v)}
+          className={`p-3 rounded-3xl border transition-all shadow-ios-sm ios-active shrink-0 ${
             onlyFavorites
-              ? 'bg-amber-400/20 border-amber-400/50 text-amber-500 dark:text-amber-400 ring-2 ring-amber-400/20'
-              : 'bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-900 dark:to-zinc-950 border-black/5 dark:border-white/10 text-zinc-400 hover:text-amber-400'
+              ? 'bg-amber-400/20 border-amber-400/50 text-amber-500 dark:text-amber-400'
+              : 'bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-900 dark:to-zinc-950 border-black/5 dark:border-white/10 text-zinc-400'
           }`}
           aria-label="Ver solo mis favoritos"
         >
@@ -235,72 +365,51 @@ export const MarketsView: React.FC<MarketsViewProps> = ({ onSelectSymbol, onOpen
 
       {!onlyFavorites && (
         <>
-          <SegmentedControl<Mode>
-            options={[
-              { label: 'En directo', value: 'live' },
-              { label: 'Por sectores', value: 'catalog' },
-            ]}
-            value={mode}
-            onChange={setMode}
-            size="sm"
-          />
+          <div className="flex gap-2">
+            <Dropdown<Region> prefix="Región" value={region} options={REGIONS} onChange={setRegion} />
+            <Dropdown<SortOrder> prefix="Orden" value={order} options={ORDERS} onChange={setOrder} />
+          </div>
 
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 -mx-4 px-4">
-            {chips.map((chip) => (
+          {/* Sectores: se reparten en varias filas, sin deslizar */}
+          <div className="flex flex-wrap gap-1.5">
+            {MARKET_CATEGORIES.map((cat) => (
               <button
-                key={chip.id}
+                key={cat.id}
                 type="button"
-                onClick={() => (mode === 'live' ? setListId(chip.id) : setCategory(chip.id))}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ios-active ${
-                  selectedChip === chip.id
-                    ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 shadow-sm font-bold'
-                    : 'bg-zinc-200/70 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                onClick={() => setSector(cat.id)}
+                className={`px-2.5 py-1.5 rounded-full text-xs font-semibold transition-all ios-active ${
+                  sector === cat.id
+                    ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 shadow-sm'
+                    : 'bg-zinc-200/70 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-400'
                 }`}
               >
-                {chip.label}
+                {SECTOR_SHORT[cat.id] || cat.label}
               </button>
             ))}
           </div>
-
-          {mode === 'live' && (
-            <div className="flex items-center justify-between px-1 -mt-2 text-[11px] text-zinc-400">
-              <span>{listTotal > 0 ? `${listItems.length} de ${listTotal.toLocaleString('es-ES')} valores · datos de Yahoo Finance` : 'Datos de Yahoo Finance'}</span>
-              <button
-                type="button"
-                onClick={() => loadList(listId, 0, Math.min(100, Math.max(PAGE_SIZE, listItems.length)), true)}
-                disabled={listLoading}
-                className="p-1 ios-active"
-                aria-label="Actualizar lista"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${listLoading ? 'animate-spin text-ios-blue' : ''}`} />
-              </button>
-            </div>
-          )}
         </>
       )}
 
+      <div className="flex items-center justify-between px-1 text-[11px] text-zinc-400">
+        <span>
+          {onlyFavorites ? 'Tus favoritos' : `${total.toLocaleString('es-ES')} valores`}
+          {!onlyFavorites && screenerIds.length > 0 && ' · incluye listas de Yahoo Finance'}
+        </span>
+        {loadingScreeners && <Loader2 className="w-3.5 h-3.5 animate-spin text-ios-blue" />}
+      </div>
+
       {/* Lista */}
-      <div className="space-y-2.5">
+      <div className="space-y-2">
         {rows.length === 0 ? (
-          listLoading ? (
-            <div className="py-16 text-center text-zinc-400">
-              <Loader2 className="w-6 h-6 animate-spin mx-auto text-ios-blue" />
-            </div>
-          ) : (
-            <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 border border-black/5 dark:border-white/5 text-center space-y-2">
-              <Star className="w-8 h-8 mx-auto text-zinc-300 dark:text-zinc-600" />
-              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-50">
-                {onlyFavorites ? 'Aún no tienes favoritos' : listError ? 'No se ha podido cargar la lista' : 'No hay valores en esta lista'}
-              </h3>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-xs mx-auto">
-                {onlyFavorites
-                  ? 'Marca con la estrella las empresas que quieras seguir.'
-                  : listError
-                  ? 'Comprueba tu conexión e inténtalo de nuevo.'
-                  : 'Prueba otra lista o busca cualquier empresa con la lupa.'}
-              </p>
-            </div>
-          )
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 border border-black/5 dark:border-white/5 text-center space-y-2">
+            <Star className="w-8 h-8 mx-auto text-zinc-300 dark:text-zinc-600" />
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-50">
+              {onlyFavorites ? 'Aún no tienes favoritos' : loadingScreeners ? 'Cargando…' : 'No hay valores con estos filtros'}
+            </h3>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-xs mx-auto">
+              {onlyFavorites ? 'Marca con la estrella las empresas que quieras seguir.' : 'Cambia la región o el sector, o busca cualquier empresa con la lupa.'}
+            </p>
+          </div>
         ) : (
           rows.map((item) => (
             <StockRow
@@ -314,22 +423,14 @@ export const MarketsView: React.FC<MarketsViewProps> = ({ onSelectSymbol, onOpen
           ))
         )}
 
-        {!onlyFavorites && mode === 'live' && listItems.length > 0 && listItems.length < listTotal && (
+        {!onlyFavorites && visible < sortedRows.length && (
           <button
             type="button"
-            onClick={() => loadList(listId, listItems.length, PAGE_SIZE, false)}
-            disabled={listLoading}
-            className="w-full py-3 rounded-2xl bg-white dark:bg-ios-card-dark border border-black/5 dark:border-white/10 text-xs font-bold text-ios-blue shadow-ios-sm ios-active flex items-center justify-center gap-1.5"
+            onClick={() => setVisible((v) => v + PAGE)}
+            className="w-full py-3 rounded-2xl bg-white dark:bg-ios-card-dark border border-black/5 dark:border-white/10 text-xs font-bold text-ios-blue shadow-ios-sm ios-active"
           >
-            {listLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-            Cargar más
+            Ver más ({(sortedRows.length - visible).toLocaleString('es-ES')} restantes)
           </button>
-        )}
-
-        {!onlyFavorites && mode === 'catalog' && visibleCount < catalogItems.length && (
-          <div ref={loadMoreRef} className="h-6 w-full flex items-center justify-center py-2 opacity-50">
-            <div className="w-4 h-4 rounded-full border-2 border-ios-blue border-t-transparent animate-spin" />
-          </div>
         )}
       </div>
     </div>

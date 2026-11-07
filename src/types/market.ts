@@ -25,6 +25,8 @@ export interface StockQuote {
   low: number;
   prevClose: number;
   volume: string;
+  /** Volumen numérico (para ordenar) */
+  volumeRaw?: number;
   marketCap: string;
   week52High?: number;
   week52Low?: number;
@@ -93,6 +95,22 @@ export interface EquityPoint {
   v: number;
 }
 
+/** Orden hecha con el mercado cerrado: se ejecuta a la apertura de la siguiente sesión. */
+export interface PendingOrder {
+  id: string;
+  kind: 'OPEN' | 'CLOSE';
+  symbol: string;
+  name: string;
+  type: PositionType;
+  currency: string;
+  createdAt: number;
+  /** OPEN: USD reservados para la compra / venta en corto */
+  amount?: number;
+  /** CLOSE: posición a cerrar y fracción (0-1] */
+  positionId?: string;
+  fraction?: number;
+}
+
 export interface SearchResult {
   symbol: string;
   name: string;
@@ -122,4 +140,7 @@ export interface GameSaveData extends GameSummary {
   tradeHistory: TradeRecord[];
   watchlist: string[];
   equityHistory: EquityPoint[];
+  pendingOrders: PendingOrder[];
+  /** Patrimonio al cierre de cada día (lo calcula el servidor; sólo lectura en la app) */
+  dailyHistory: EquityPoint[];
 }

@@ -194,14 +194,16 @@ export function summarizePortfolio(
   cashAvailable: number,
   initialCash: number,
   quotes: Record<string, StockQuote>,
-  rates: FxRates
+  rates: FxRates,
+  /** USD reservados en órdenes de compra pendientes */
+  reserved: number = 0
 ): PortfolioSummary {
   const views = positions.map((p) => valuePosition(p, quotes[p.symbol], rates));
   const cashInvested = views.reduce((acc, p) => acc + p.investedAmount, 0);
   const positionsValue = views.reduce((acc, p) => acc + p.currentValue, 0);
   const totalPnL = views.reduce((acc, p) => acc + p.unrealizedPnL, 0);
   const dailyPnL = views.reduce((acc, p) => acc + p.dayPnL, 0);
-  const totalNetWorth = cashAvailable + positionsValue;
+  const totalNetWorth = cashAvailable + positionsValue + reserved;
   const startOfDay = totalNetWorth - dailyPnL;
   return {
     views,
