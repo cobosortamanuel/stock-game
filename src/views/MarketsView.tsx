@@ -1,13 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronDown, Loader2, Search, Star } from 'lucide-react';
+import { Check, ChevronDown, Clock, Loader2, Search, Star } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { StockQuote } from '../types/market';
 import { fetchScreener, formatCurrency, formatPercent, MARKET_CATEGORIES, POPULAR_SYMBOLS } from '../services/marketApi';
 import { getFxRate } from '../lib/portfolio';
+import { MarketHoursSheet } from '../components/common/MarketHoursSheet';
 
 interface MarketsViewProps {
   onSelectSymbol: (symbol: string) => void;
   onOpenSearch: () => void;
+  /** Popup de aperturas y órdenes pendientes */
+  hoursOpen: boolean;
+  onHoursOpenChange: (open: boolean) => void;
 }
 
 // ---------------------------------------------------------------------
@@ -223,8 +227,8 @@ const StockRow = React.memo<{
 // Vista
 // ---------------------------------------------------------------------
 
-export const MarketsView: React.FC<MarketsViewProps> = ({ onSelectSymbol, onOpenSearch }) => {
-  const { liveQuotes, fxRates, watchlist, toggleWatchlist, ensureQuotes, mergeQuotes } = useTrading();
+export const MarketsView: React.FC<MarketsViewProps> = ({ onSelectSymbol, onOpenSearch, hoursOpen, onHoursOpenChange }) => {
+  const { pendingOrders, liveQuotes, fxRates, watchlist, toggleWatchlist, ensureQuotes, mergeQuotes } = useTrading();
   const [region, setRegion] = useState<Region>('ALL');
   const [order, setOrder] = useState<SortOrder>('DEFAULT');
   const [sector, setSector] = useState('ALL');
@@ -361,7 +365,26 @@ export const MarketsView: React.FC<MarketsViewProps> = ({ onSelectSymbol, onOpen
         >
           <Star className={`w-5 h-5 ${onlyFavorites ? 'fill-amber-400 text-amber-400' : ''}`} />
         </button>
+        <button
+          type="button"
+          onClick={() => onHoursOpenChange(true)}
+          className={`relative p-3 rounded-3xl border transition-all shadow-ios-sm ios-active shrink-0 ${
+            pendingOrders.length > 0
+              ? 'bg-ios-orange/15 border-ios-orange/40 text-ios-orange'
+              : 'bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-900 dark:to-zinc-950 border-black/5 dark:border-white/10 text-zinc-400'
+          }`}
+          aria-label="Aperturas de mercado y órdenes pendientes"
+        >
+          <Clock className="w-5 h-5" />
+          {pendingOrders.length > 0 && (
+            <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-ios-orange text-white text-[10px] font-bold flex items-center justify-center">
+              {pendingOrders.length}
+            </span>
+          )}
+        </button>
       </div>
+
+      {hoursOpen && <MarketHoursSheet onClose={() => onHoursOpenChange(false)} onSelectSymbol={onSelectSymbol} />}
 
       {!onlyFavorites && (
         <>

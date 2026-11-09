@@ -26,6 +26,7 @@ function AppContent() {
   const [activeTab, setActiveTab] = useState<TabType>('portfolio');
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
+  const [isHoursOpen, setIsHoursOpen] = useState<boolean>(false);
 
   const handleSelectSymbol = (symbol: string) => {
     setSelectedSymbol(symbol);
@@ -73,6 +74,10 @@ function AppContent() {
                 <PortfolioView
                   onSelectSymbol={handleSelectSymbol}
                   onExploreMarkets={() => setActiveTab('markets')}
+                  onOpenOrders={() => {
+                    setActiveTab('markets');
+                    setIsHoursOpen(true);
+                  }}
                 />
               )}
 
@@ -80,6 +85,8 @@ function AppContent() {
                 <MarketsView
                   onSelectSymbol={handleSelectSymbol}
                   onOpenSearch={() => setIsSearchOpen(true)}
+                  hoursOpen={isHoursOpen}
+                  onHoursOpenChange={setIsHoursOpen}
                 />
               )}
 
@@ -99,6 +106,7 @@ function AppContent() {
           activeTab={activeTab}
           onChangeTab={(tab) => {
             setSelectedSymbol(null);
+            setIsHoursOpen(false);
             setActiveTab(tab);
           }}
           openPositionsCount={positions.length}

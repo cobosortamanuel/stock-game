@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Clock, Layers, PlusCircle, TrendingUp, X } from 'lucide-react';
+import { ChevronRight, Clock, Layers, PlusCircle, TrendingUp } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { ChartPoint, TimeRange } from '../types/market';
 import { formatCurrency, formatPercent, getMarketStatus } from '../services/marketApi';
@@ -10,6 +10,7 @@ import { equityValueAt, PortfolioPeriod, periodStart } from '../lib/portfolio';
 interface PortfolioViewProps {
   onSelectSymbol: (symbol: string) => void;
   onExploreMarkets: () => void;
+  onOpenOrders: () => void;
 }
 
 const PERIODS: TimeRange[] = ['1D', '1W', '1M', '1Y', 'ALL'];
@@ -28,7 +29,7 @@ const Metric: React.FC<{ label: string; value: string; color: string }> = ({ lab
   </div>
 );
 
-export const PortfolioView: React.FC<PortfolioViewProps> = ({ onSelectSymbol, onExploreMarkets }) => {
+export const PortfolioView: React.FC<PortfolioViewProps> = ({ onSelectSymbol, onExploreMarkets, onOpenOrders }) => {
   const {
     initialCash,
     cashAvailable,
@@ -40,7 +41,6 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({ onSelectSymbol, on
     positions,
     pendingOrders,
     closePosition,
-    cancelOrder,
     liveQuotes,
   } = useTrading();
 
@@ -97,47 +97,19 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({ onSelectSymbol, on
         </div>
       </div>
 
-      {/* Órdenes pendientes */}
+      {/* Órdenes pendientes: el detalle está en Mercados */}
       {pendingOrders.length > 0 && (
-        <div>
-          <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-50 mb-2 px-1 flex items-center gap-1.5">
-            <Clock className="w-4 h-4 text-ios-orange" />
-            Órdenes para la apertura ({pendingOrders.length})
-          </h2>
-          <div className="bg-white dark:bg-ios-card-dark rounded-3xl border border-black/5 dark:border-white/5 shadow-ios-sm divide-y divide-black/5 dark:divide-white/5 overflow-hidden">
-            {pendingOrders.map((order) => (
-              <div key={order.id} className="p-3.5 flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-sm text-zinc-900 dark:text-zinc-50">{order.symbol}</span>
-                    <span
-                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${
-                        order.kind === 'CLOSE'
-                          ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300'
-                          : order.type === 'LONG'
-                          ? 'bg-ios-green/15 text-ios-green'
-                          : 'bg-ios-orange/15 text-ios-orange'
-                      }`}
-                    >
-                      {order.kind === 'CLOSE' ? `Cerrar ${Math.round((order.fraction || 1) * 100)}%` : order.type === 'LONG' ? 'Compra' : 'Corto'}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-zinc-400 leading-snug">
-                    {order.kind === 'OPEN' ? `${formatCurrency(order.amount || 0)} reservados · ` : ''}al abrir el mercado
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => cancelOrder(order.id)}
-                  className="py-1.5 px-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-[11px] font-semibold flex items-center gap-1 ios-active shrink-0"
-                >
-                  <X className="w-3 h-3" />
-                  Cancelar
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
+        <button
+          type="button"
+          onClick={onOpenOrders}
+          className="w-full px-4 py-3 rounded-3xl bg-ios-orange/10 border border-ios-orange/30 flex items-center gap-2.5 text-left ios-active"
+        >
+          <Clock className="w-4 h-4 text-ios-orange shrink-0" />
+          <span className="flex-1 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+            {pendingOrders.length === 1 ? '1 orden pendiente' : `${pendingOrders.length} órdenes pendientes`} para la apertura
+          </span>
+          <ChevronRight className="w-4 h-4 text-zinc-400 shrink-0" />
+        </button>
       )}
 
       {/* Posiciones */}
